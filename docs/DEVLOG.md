@@ -66,3 +66,12 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
   - Telnyx wiki was not consulted for this slice because only outward actions were performed. Per AGENTS.md, the wiki is mandatory for platform feature usage; we only used CLI commands already documented in TDD §14.3 runbook.
 
 **Commit**: `Day 1: actor scaffold, webhook, CallerProfile, KV read, seven MCP tools, admin/ops routes`
+
+## 2026-11-12 — build: added TELNYX_PUBLIC_KEY and re-shipped
+
+- Added `HRLEAVE_TELNYX_PUBLIC_KEY` secret with the provided Ed25519 public key.
+- `telnyx-edge ship` → redeployed in 3m36s.
+- Webhook now returns 401 without a valid signature (fail closed as designed).
+- Full end-to-end webhook test requires a real Telnyx `assistant.initialization` event with a valid Ed25519 signature.
+
+**Commit**: `Day 1 deployment: telnyx.toml with real IDs, KV seeded, smoke scripts, DEVLOG entry`
