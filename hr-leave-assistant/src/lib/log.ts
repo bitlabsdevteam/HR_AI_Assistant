@@ -1,0 +1,83 @@
+/**
+ * Possible outcomes for a completed request, used in structured logging.
+ * These values are emitted as the `outcome` field in completion logs.
+ */
+export type LogOutcome =
+  | "ready"
+  | "degraded"
+  | "ok"
+  | "verified"
+  | "auth_failed"
+  | "locked"
+  | "approved"
+  | "cancelled"
+  | "replayed"
+  | "insufficient_balance"
+  | "overlap"
+  | "out_of_policy"
+  | "not_found"
+  | "changes_paused"
+  | "queued"
+  | "invalid_input"
+  | "unauthenticated"
+  | "unauthorized"
+  | "error";
+
+/**
+ * Structured log entry written at the end of every webhook, tool, admin, or ops request.
+ * Follows the TDD §10.1 shape and always carries `call_ref`.
+ */
+export interface CompletionLog {
+  /** The type of event that completed. */
+  event: "webhook.completed" | "tool.completed" | "admin.completed" | "ops.completed";
+  /** Unique reference for this call (or "none" for non-call contexts). */
+  call_ref: string;
+  /** High-level outcome of the request. */
+  outcome: LogOutcome;
+  /** HTTP status code returned. */
+  status: number;
+  /** Total request duration in milliseconds. */
+  duration_ms: number;
+  /** Log severity level (defaults to "info"). */
+  level?: "info" | "warn" | "error";
+  /** Telnyx conversation ID, if available. */
+  conversation_id?: string;
+  /** Pseudonym of the caller (first 8 hex chars of HMAC). */
+  caller?: string;
+  /** Pseudonym of the employee (first 8 hex chars of HMAC). */
+  emp?: string;
+  /** Workflow node that handled the request. */
+  node?: string;
+  /** MCP tool name that was invoked. */
+  tool?: string;
+  /** Time spent waiting for actor calls in milliseconds. */
+  actor_ms?: number;
+  /** Whether KV read was a hit or fell back to defaults. */
+  kv?: "hit" | "fallback";
+  /** Code revision or deployment identifier. */
+  revision?: string;
+  /** Additional detail for debugging (e.g. "invalid_payload", "kv_fallback"). */
+  detail?:
+    | "invalid_payload"
+    | "missing_hash_key"
+    | "missing_conversation_id"
+    | "invalid_conversation_id"
+    | "actor_unavailable"
+    | "kv_fallback";
+}
+
+/**
+ * Writes a single structured JSON log line to stdout.
+ * This is the project's only logging path; every request writes exactly one line
+ * in its `finally` block.
+ *
+ * @param fields - The completion log fields to emit.
+ */
+export function writeCompletionLog(fields: CompletionLog): void {
+  const line = {
+    ts: new Date().toISOString(),
+    ...fields,
+    level: fields.level ?? "info",
+  };
+  console.log(JSON.stringify(line));
+}
