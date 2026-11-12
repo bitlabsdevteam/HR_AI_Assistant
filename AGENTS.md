@@ -24,6 +24,7 @@ Before you build, change, or debug anything that touches the Telnyx platform (Ed
 | Touch an actor, KV, or leave rules | TDD §8 |
 | Handle a PIN, a token, or an employee number | TDD §7.1 and §9 |
 | Log anything | TDD §10.1 |
+| Trace, export, or send anything to Langfuse | TDD §10.5 and §9 item 9 |
 | Hit platform behavior that contradicts the TDD | TDD §13, then record what you saw in `docs/DEVLOG.md` |
 | Decide whether something is in scope | `docs/PRD.md` §3 |
 | Touch any Telnyx platform feature, command, or config key | Wiki index `/Users/davidbong/Documents/Telnyx_Test/Telynyx/index.md` (mandatory, see above) |
@@ -94,6 +95,8 @@ When something breaks in a way that takes more than a few minutes to find, creat
 - **Replay is safe.** `apply_leave` with the same employee, first day, and last day returns the same reference. A repeated `cancel_leave` restores days once.
 - **Honest results.** A tool reports `approved`, `cancelled`, or `queued` only after the actor call returned it. Failures return `ok: false` with a code from TDD §7.2.
 - **One log line per request**, written in `finally`, in the TDD §10.1 shape, carrying `call_ref`.
+- **Observability is a requirement, not polish.** Every slice emits its log line (above) before it is done, and a call-path slice also leaves a Langfuse trace for a real call (TDD §10.5). If you cannot see what a slice did in the logs or the trace, the slice is not finished; do not add a feature you cannot observe.
+- **Langfuse is a log.** Everything in the next rule applies to it. The function's spans carry only the allowlisted fields in TDD §10.5 (pseudonyms, tool name, outcome, durations, `call_ref`, `conversation_id`), never an argument, result body, token, PIN, name, or employee number. Tracing is best effort: it never blocks a request past its cap, never throws into the request, and never changes an outcome. The allowlist is one function with a test.
 - **People are pseudonyms.** Logs and actor names carry the HMAC of a phone number or employee number, shown as its first 8 hex characters. Names, raw numbers, employee numbers, PINs, tokens, bearer values, and request bodies stay out of logs, error messages, and counters.
 - **PINs are guarded.** Store only the HMAC. Compare in constant time. Answer an unknown employee number exactly as a wrong PIN: same code, same wording, same `attempts_left` countdown, same lock (`HrDesk.failUnknown` keeps the count for numbers that are not on the roster). Three failures lock the employee for 15 minutes. Never speak, log, or return a PIN.
 - **Fail closed on auth.** A missing secret means `401`, on `/mcp`, `/ops`, and `/admin` alike.
@@ -110,6 +113,7 @@ The challenge grades more than "it works". `docs/GRADING_MAP.md` maps each crite
 - **Happy path and fallback path together.** A slice is not done until one call or test shows its happy path and at least one fallback (wrong PIN, insufficient balance, overlap, too-late cancel, tool failure, webhook default).
 - **Voice UX.** One question per turn, short sentences, read back dates and counts before any change, never speak a PIN.
 - **Evidence over claims.** Record the model ID in the DEVLOG each session, and write the incident file when a bug costs more than a few minutes.
+- **Observability is graded.** Structured logs with `call_ref`, a signal beyond logs, a one-minute detection story, and a real bug found from evidence. Langfuse supplies the LLM-side view and the stretch tracing claim. After a call, find it in Langfuse by `conversation_id` (or by the trace ID from `scripts/trace-id.sh`) and put the trace ID in the DEVLOG entry. Never paste caller speech from a trace into the DEVLOG, an incident file, or a commit.
 
 ## Platform gotchas
 
@@ -122,9 +126,13 @@ The challenge grades more than "it works". `docs/GRADING_MAP.md` maps each crite
 - Logs reach `telnyx-edge logs` a few seconds after the request. Use `--tail` while testing.
 - If `ship` times out, run `telnyx-edge ship status hr-leave-assistant` and wait for its answer.
 - `telnyx-edge dev` does not emulate KV or secrets. Integration testing happens against the deployed function.
+- Langfuse has two keys in two places. The assistant's `observability_settings` uses Telnyx Integration Secrets, which Edge code cannot read; the function's own spans need separate Edge secrets (`HRLEAVE_LANGFUSE_*`, TDD §4.1) that David adds. Code treats them as optional and logs `trace: "off"` when absent.
+- Use Langfuse's OTLP endpoint (`/api/public/otel/v1/traces`), not the legacy `/api/public/ingestion`, which Langfuse sunsets on Cloud on 2026-11-16. The trace ID is the first 32 hex characters of the SHA-256 of the conversation ID, so a span with a different ID lands on an orphan trace.
+- Telnyx traces webhook tools only. Do not assume an MCP tool call appears in Langfuse unless check C-8 shows it.
+- A spoken PIN may reach Langfuse through the model's input messages. Do not turn on tracing for a real call or finish a call-path slice until TDD check C-8 has searched a trace for a synthetic PIN.
 
 ## Outward actions
 
-These spend account credit or change remote state: `telnyx-edge new-func`, `ship`, `secrets add`, `storage kv create`, buying a number, creating an assistant or MCP server, and phone calls. Run one only when David has asked for that action in the current session. Read-only commands (`logs`, `metrics`, `deployments`, `inspect`, `storage kv key get`) are always fine.
+These spend account credit or change remote state: `telnyx-edge new-func`, `ship`, `secrets add`, `storage kv create`, buying a number, creating an assistant or MCP server, and phone calls. Run one only when David has asked for that action in the current session. Adding the Langfuse Edge secrets, or changing the assistant's `observability_settings`, is also remote state: do it only on request. Read-only commands (`logs`, `metrics`, `deployments`, `inspect`, `storage kv key get`) are always fine.
 
 Secrets live in Edge secrets and David's password manager. The demo employees and their PINs are synthetic and live in `src/config/default-employees.ts`; no real secret goes there. Commit `.opencode/opencode.json`; keep `.env`, `.telnyx/`, and auth stores out of git. Push only to David's repository; the gist clone's remote belongs to Telnyx.

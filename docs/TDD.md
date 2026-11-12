@@ -1,6 +1,8 @@
 # Technical Design Document — HR Leave Assistant
 
-Version 3.0 · 2026-11-12 · Status: design for a three-day build (Thu 12 – Sat 14 Nov 2026). Nothing is built or deployed yet.
+Version 3.1 · 2026-11-12 · Status: design for a three-day build (Thu 12 – Sat 14 Nov 2026). Source code for the Day 1 scaffold exists; nothing is deployed or verified against the account yet.
+
+Revision 3.1 adds Langfuse tracing as a second observability layer (§10.5, checks C-8 and C-9). The Telnyx platform sends the assistant's model turns to Langfuse by configuration alone; the Edge Function optionally adds its own spans to the same trace. No existing contract changes.
 
 Revision 3.0 changes the use case from an appointment receptionist to an HR leave assistant: an employee phones in, proves who they are, asks for their annual leave balance, and applies for or cancels leave. The platform design (Edge Function, KV, actors, workflow, MCP, observability) is unchanged in kind; the domain, the tools, the actors, and the identity step are new. Revision 2.0 is kept in [archive/v2.0-receptionist/](archive/v2.0-receptionist/TDD.md) and revision 1.1 in [archive/v1.1/](archive/v1.1/TDD.md). §16 lists what was cut and where to find it.
 
@@ -21,6 +23,7 @@ An English phone assistant for the HR desk of a fictional company, Cedar Group. 
 | Validation | Zod v4 | Tool inputs, webhook payload, KV values. |
 | Crypto | Web Crypto: Ed25519 verify, HMAC-SHA-256, SHA-256 | No extra dependency. |
 | Tests | Vitest for pure domain code; shell scripts against the deployed app | `telnyx-edge dev` needs Docker and does not emulate KV or secrets, so the deployed app is the integration environment. [S08] |
+| Tracing | Langfuse (host and keys held by David), two paths: the assistant's `observability_settings` (platform side, no code) and OTLP/HTTP spans from the function (Should tier) | The function uses plain `fetch` and Web Crypto; no Langfuse SDK. §10.5. [S23, S24] |
 | Coding agent (builder) | OpenCode + `@telnyx/opencode` on a Telnyx-hosted model | Writes all solution code. Challenge requirement 6. See §14.2. |
 | Review agent | Claude Code | Reviews each slice; writes no solution code. See §14.2. |
 
@@ -51,6 +54,8 @@ Telnyx number -> AI Assistant + Conversation Workflow (11 nodes)
 Every request -> one JSON log line carrying call_ref  -> telnyx-edge logs
 Platform      -> request counts, error rates, latency -> telnyx-edge metrics
 Laptop probe  -> /ops/check + MCP tools/list every 15 s -> alert
+Assistant     -> every model turn            -> Langfuse  (platform-side, trace id = SHA-256 of conversation_id)
+Function      -> one span per tool call      -> Langfuse  (OTLP, same trace id; best effort, Should tier)
 ```
 
 Two separate paths share one `call_ref`. Path 1 runs once at call start: the webhook reads KV, records the call in `CallerProfile`, and returns variables. It never touches employee data. Path 2 runs whenever a workflow node calls a tool: the MCP handler checks the bearer, resolves who the employee is from a signed session token (§7.1), validates, reads KV where needed, and calls `EmployeeLeave` or `HrDesk`.
@@ -121,7 +126,7 @@ How this design maps to it:
 | KV and Actor inside the function | `env.HR_KV` plus the three actors of §8 |
 | MCP Server (Custom) | `POST /mcp` with 7 tools (§7), a route in the same function, not a separate host |
 | Workflow Routing evaluated by the Telnyx runtime | Variable and LLM edges (§6.2); nothing to build |
-| Logs / Metrics | §10 |
+| Logs / Metrics | §10, with Langfuse traces in §10.5 |
 | OpenCode with `@telnyx/opencode`, Telnyx Inference | §14.2 |
 
 Two differences to explain on demo day: the MCP server shares the webhook's deployment (the challenge's Step 4 allows "an Edge Function or any public host"), and the MCP tools also reach the actors, because that is where leave is read and changed. The webhook never touches employee data.
@@ -172,6 +177,8 @@ name    = "HRLEAVE_TELNYX_PUBLIC_KEY"
 func_id   = "<written by new-func>"
 func_name = "hr-leave-assistant"
 ```
+
+The Langfuse credentials the function needs for its own spans (§10.5) are three more Edge secrets, `HRLEAVE_LANGFUSE_PUBLIC_KEY`, `HRLEAVE_LANGFUSE_SECRET_KEY`, and `HRLEAVE_LANGFUSE_HOST`, bound as `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST`. They are not in the block above on purpose: add them to `telnyx.toml` only after David has created them (`secrets add` is a billable-class action), and the code treats all three as optional. The assistant-side Langfuse keys are Telnyx Integration Secrets, a separate store that Edge code cannot read, so the function needs its own copies.
 
 `HASH_KEY` is one secret with four uses, kept apart by a prefix on the HMAC input: `caller|` for caller pseudonyms, `emp|` for employee pseudonyms and actor names, `pin|` for PIN hashes, `tok|` for session tokens.
 
@@ -329,6 +336,8 @@ Tool scope: each node's Tools tab starts with every assistant tool enabled, so t
 
 Assistant privacy settings: set `privacy_settings.pii_redaction` to `redact` so stored history and tool arguments are redacted, and record the readback in `assistant/assistant.json`. It does not redact the live tool payload, which still carries the PIN to the function, so the function never logs a body (§9). [S02, TELNYX_PLATFORM_RESEARCH §4.3]
 
+Langfuse: set `observability_settings` to `status: "enabled"`, `secret_key_ref` and `public_key_ref` naming the two Integration Secrets David created, and `host`. Leave `prompt_name`, `prompt_version`, `prompt_label`, and `prompt_sync` unset (§16). David reports the keys and host are configured on the Telnyx platform; that is a claim until the `GET /v2/ai/assistants/{id}` readback in `assistant/assistant.json` shows `observability_settings.status` as `enabled` with the refs and host (the secret values are never readable). Whether `pii_redaction` also redacts what Langfuse receives is not stated by Telnyx; check C-8 tests it. [S23]
+
 ## 7. MCP server
 
 `POST /mcp` verifies the bearer, then hands the request to the v1 SDK's web-standard transport, which serves a fresh server per request. No session map, no server-sent stream. The build, SDK ladder, logging, and grader-test details are in [MCP_SERVER_SPEC.md](MCP_SERVER_SPEC.md); where it differs from this section, the spec wins for the MCP slice. The Telnyx MCP server record is created in the Portal with type HTTP, the deployed `/mcp` URL, the Integration Secret that holds the same bearer value, and the seven tools allowed; it is then attached to the assistant under Integrations. The Portal's play button proves discovery only; a real call proves execution. [S05, S06]
@@ -481,6 +490,7 @@ listCallbacks() · stats() · reset() · ping()
 6. Logs never contain a raw phone number, an employee number, a PIN, a name, a session token, an `Authorization` header, or a request body. Callers and employees appear as the first 8 hex characters of their HMAC.
 7. Tools take typed, bounded inputs only. The transfer destination, when added, is fixed configuration.
 8. Synthetic data only. Call recording stays off. Assistant `pii_redaction` is set to `redact` (§6.4).
+9. **Langfuse is a log, so the log rules apply to it.** Spans the function sends carry only the fields §10.1 allows (pseudonyms, tool name, outcome, durations, `call_ref`) and never an argument, a result body, a token, or a name. The assistant-side export is outside the function's control and does include what the model saw, so a spoken PIN may be in it; check C-8 must show a synthetic PIN absent from the traces, or the limitation is named in the README and `observability_settings` stays disabled for any call that is not synthetic. Langfuse project keys are secrets under item 5. Tracing never blocks, slows past its deadline, or fails a request (§10.5).
 
 ## 10. Observability
 
@@ -492,8 +502,10 @@ One JSON line per webhook call, tool call, admin call, and ops check, written in
 { "ts": "2026-11-13T15:04:05.120Z", "level": "info", "event": "tool.completed",
   "call_ref": "c_4f9a1c22b07e", "conversation_id": "<from MCP _meta>", "caller": "9c1e44ab", "emp": "5d02b7e1",
   "node": "N35", "tool": "apply_leave", "outcome": "approved", "status": 200,
-  "duration_ms": 142, "actor_ms": 61, "kv": "hit", "revision": "<deploy revision>" }
+  "duration_ms": 142, "actor_ms": 61, "kv": "hit", "trace": "sent", "revision": "<deploy revision>" }
 ```
+
+`trace` records what happened to the Langfuse export (§10.5): `sent`, `skipped` (no conversation ID), `failed`, or `off` (no Langfuse secrets). It is omitted until Layer 2 exists.
 
 `conversation_id` is the Telnyx conversation ID, read from `params._meta.telnyx_conversation_id` on MCP tool calls and from the request payload on the webhook; it is omitted from lines that have neither. `caller` is the phone pseudonym, present on the webhook line; `emp` is the employee pseudonym, present on tool lines once a token or a roster number has been resolved. `node` is `initialization` for the webhook. For tools it is the node each tool is scoped to (§6.1), which the MCP request itself does not carry; the README says so. `outcome` is a fixed vocabulary: `ready`, `degraded`, `ok`, `verified`, `auth_failed`, `locked`, `approved`, `cancelled`, `replayed`, `insufficient_balance`, `overlap`, `out_of_policy`, `not_found`, `changes_paused`, `queued`, `invalid_input`, `unauthenticated`, `unauthorized`, `error`. `unauthorized` is a failed bearer or signature; `unauthenticated` is a missing, forged, expired, or foreign session token.
 
@@ -504,6 +516,7 @@ One JSON line per webhook call, tool call, admin call, and ops check, written in
 | Request counts, 2xx/4xx/5xx rates, latency percentiles | `telnyx-edge metrics hr-leave-assistant`, `telnyx-edge actors metrics EmployeeLeave` | Traffic, errors, and latency with no application code. [S08, S22] |
 | Outcome counters | `GET /admin/stats` | Verifications, failures, lockouts, approvals, replays, refusals, cancellations, callbacks; exact, because they change with the outcome. |
 | Per-call trace | `scripts/trace.sh <call_ref>`, which filters `telnyx-edge logs --since 30m --json` | One call's path: webhook → KV → `CallerProfile` → tool → `EmployeeLeave`, with per-hop milliseconds. |
+| Langfuse trace per conversation | Langfuse project, filtered by `conversation_id` metadata, or opened by the trace ID from `scripts/trace-id.sh <conversation_id>` | What the model was given and said at each turn, token usage, and the function's own tool spans on the same trace (§10.5). The only view of the LLM side, which logs and metrics cannot show. |
 
 ### 10.3 Knowing within a minute
 
@@ -513,9 +526,28 @@ What it covers: the function is unreachable, KV or an actor is failing, the MCP 
 
 First look when it fires: `/ops/check` output (which dependency), then `telnyx-edge logs hr-leave-assistant --since 10m`, then `telnyx-edge deployments hr-leave-assistant` for a recent ship.
 
+Langfuse extends the second half. The probe cannot see a workflow that routes wrongly or a model that mishears, but a bad call leaves a trace: the operator filters Langfuse for the last conversation, reads which node's prompt the model had and what it answered, and joins to the log lines by `conversation_id`. That is the first look for "the call went wrong but the probe is green". It is a diagnostic, not an alert; Langfuse sends none from this design.
+
 ### 10.4 Incident record
 
-When a real bug appears, write `docs/incidents/<date>-<name>.md` the same day: symptom, the log line or metric that exposed it, hypothesis, root cause, fix, and the check that proves the fix. This is a mandatory deliverable and it cannot be invented afterwards.
+When a real bug appears, write `docs/incidents/<date>-<name>.md` the same day: symptom, the log line or metric that exposed it, hypothesis, root cause, fix, and the check that proves the fix. This is a mandatory deliverable and it cannot be invented afterwards. When the bug involved a call, link the Langfuse trace ID (not a screenshot of caller speech) and quote the log line.
+
+### 10.5 Langfuse tracing
+
+Langfuse answers a question the other signals cannot: what did the model see and say on a call. Two layers, kept independent so the first works with no code.
+
+**Layer 1: platform export (Must tier, configuration only).** With `observability_settings` enabled (§6.4), Telnyx sends each LLM generation (full input messages including the system prompt, output, model, token usage for non-streaming calls) and each webhook-tool call to Langfuse. Every turn of one conversation lands on one trace, with metadata `conversation_id` and `assistant_id`. The trace ID is the first 32 hex characters of the SHA-256 of the UTF-8 `conversation_id`, a contract Telnyx documents. Telnyx traces **webhook** tool calls; this design's tools are MCP tools, so whether they appear as `tool-call-<name>` events is unknown and is recorded by check C-8. Do not rely on them. [S23]
+
+**Layer 2: function spans (Should tier, built after the Must tier is green).** For each MCP `tools/call` the function emits one OTLP span to Langfuse under the same trace ID, so the function's work appears beside the model's turns. Rules:
+
+- **Trace ID.** `sha256Hex(conversation_id).slice(0, 32)` with Web Crypto, from `params._meta.telnyx_conversation_id`. Without a conversation ID (check C-2) emit no span and log `trace: "skipped"`. Never invent a trace ID, which would create orphan traces.
+- **Transport.** `POST {LANGFUSE_HOST}/api/public/otel/v1/traces`, OTLP over HTTP with a JSON body, HTTP Basic auth of the public and secret keys, header `x-langfuse-ingestion-version: 4`. Langfuse's legacy `/api/public/ingestion` endpoint is not used: Langfuse documents it as deprecated and sunset on Langfuse Cloud on 2026-11-16. [S24]
+- **Span.** Name is the tool name; start and end from the request's own clock; `langfuse.observation.type` is `tool`; `langfuse.observation.level` is `ERROR` for `outcome: "error"` or `"unavailable"`, `WARNING` for refusals and auth failures, otherwise `DEFAULT`. No parent span ID, because Telnyx's observation IDs are not known; the spans hang off the trace. Attribute keys are those in S24.
+- **Allowlist, enforced in one function.** Metadata may carry only: `call_ref`, `conversation_id`, `tool`, `node`, `outcome`, `duration_ms`, `actor_ms`, `emp` and `caller` (the 8-character pseudonyms), `revision`. Input and output attributes are never set. The allowlist lives in `src/lib/langfuse.ts` and a test fails if any other key can reach the payload.
+- **Never in the way.** The export starts in the request's `finally`, after the response is built, with a 1,000 ms deadline, a single attempt, and every error swallowed into one log field: `trace: "sent" | "skipped" | "failed" | "off"`. If the secrets are absent, `trace: "off"`. A request never waits longer than 300 ms on it. Check C-9 decides whether the runtime lets an unawaited `fetch` finish after the response; if it does not, the export is awaited under the 300 ms cap and spans may be dropped, which is acceptable.
+- **What it is not.** It adds no counter, no score, no evaluation, and no source of truth. `/admin/stats` and the logs remain authoritative; a missing span never means a missing outcome.
+
+Why this is worth its cost: a tool call that the logs show as `approved` can be read next to the model turn that triggered it and the one that spoke the result, which is the evidence for "never claim approval without a matching tool result" (§6) on a real call. Why it stays best effort: the caller is on the phone, and nothing in Langfuse may change what they hear.
 
 ## 11. Failure handling
 
@@ -533,6 +565,7 @@ When a real bug appears, write `docs/incidents/<date>-<name>.md` the same day: s
 | Changes paused mid-call | Tool returns `changes_paused`; N35 routes to N70 | `outcome: "changes_paused"` |
 | MCP auth broken | Tool errors; N35/N40/N70 route onward to the fallback | `outcome: "unauthorized"`, probe alert |
 | `EmployeeLeave` failing | No success is claimed; callback or degraded path | `outcome: "error"`, probe alert |
+| Langfuse unreachable, keys wrong, or export slow | Nothing; the call is unaffected | `trace: "failed"` or `"off"` on the log line; no Langfuse trace for that call. Logs and `/admin/stats` still hold the full record |
 
 Deadlines: webhook 2,000 ms internal; tools 4,000 ms. No automatic retries inside the function.
 
@@ -540,7 +573,7 @@ Deadlines: webhook 2,000 ms internal; tools 4,000 ms. No automatic retries insid
 
 | Kind | Cases |
 | --- | --- |
-| Vitest, local | Working-day count across weekends and holidays; inclusive overlap; notice, leave-year, and maximum-length rules; invalid and non-real dates; balance arithmetic; `is_open_now` at boundaries; request-key stability; session token sign, verify, expiry, and conversation binding with a known vector; PIN hash and lockout logic; signature verification with a known vector; tool input validation. |
+| Vitest, local | Working-day count across weekends and holidays; inclusive overlap; notice, leave-year, and maximum-length rules; invalid and non-real dates; balance arithmetic; `is_open_now` at boundaries; request-key stability; session token sign, verify, expiry, and conversation binding with a known vector; PIN hash and lockout logic; signature verification with a known vector; tool input validation; Langfuse trace ID from a known `conversation_id` against the digest Telnyx's own `python3` one-liner prints; span payload allowlist (a fixture containing a PIN, a token, an employee number, and a name yields a payload with none of them); the export never throws and never exceeds its cap when `fetch` rejects or hangs. |
 | `scripts/smoke.sh`, deployed | Health is 200; `/mcp` and `/admin` return 401 without a bearer; `tools/list` returns seven tools; an employee tool without a token returns `unauthenticated`. |
 | `scripts/race.sh`, deployed | (a) Twenty parallel one-day `apply_leave` calls on distinct working days for employee 1003, who has five days: exactly five `approved`, fifteen `insufficient_balance`, final remaining zero, never negative. (b) The same request twice: one request, same reference. (c) Two parallel `cancel_leave` calls for one request: one `cancelled`, one replay, balance restored once. (d) Ten parallel wrong-PIN attempts for employee 1004: exactly three `auth_failed`, seven `locked`. (e) Two parallel `recordCall`s for one caller: count rises by two. (f) A token from one conversation presented under another: `unauthenticated`. (g) Four attempts on a number that is not on the roster: the same countdown and lock as employee 1004. |
 | Phone calls | One per path: balance; apply; cancel; policy then balance; correction before yes; refusal at confirmation; three wrong PINs; paused changes; callback; second call from the same number; webhook defaults (point the assistant at a dead URL once). |
@@ -558,6 +591,8 @@ Each has a time limit and a fallback so one surprise cannot consume a day.
 | C-5 | Does the webhook answer inside the timeout on a cold start? | Day 1, measure | Raise the timeout up to 5000 ms; the probe also keeps the function warm during the demo. |
 | C-6 | Is the built-in transfer usable from a node? (should tier) | Day 3, 45 min | Keep the callback path as the only escalation. |
 | C-7 | Does speech recognition capture a four-digit employee number and a four-digit PIN reliably over a phone line, does the voice model hand the `auth_token` back unchanged to the next tool call (N10 to N30, N35, N40), and does `pii_redaction: redact` leave the digits and the token usable for the model? | Day 2, first call, 45 min | Ask for the digits one at a time and read the employee number back (never the PIN); after two unclear attempts route to the callback node (a wrong but clearly heard PIN counts toward the lockout instead). Record the failure rate. For the token, compare the one in the `verify_employee` result with the one in the next `tools/call` by length and a hash in the log, never by value; if it is altered, use the server-side session fallback in §7.1. |
+| C-8 | Do the assistant's Langfuse traces arrive, one per conversation under the SHA-256 trace ID; do MCP tool calls show as `tool-call-<name>` events; and does a **synthetic PIN spoken on a call appear anywhere in the trace** (input messages, output, tool arguments) with `pii_redaction: redact` on? | Day 2, with the first call that signs in, 30 min. Search the trace for the four PIN digits both as digits and as spoken words. | Traces absent: check `status`, the secret refs, and the host against the readback; fix before moving on. MCP calls untraced: expected, Layer 2 covers it. **PIN present: blocking.** Keep `observability_settings` disabled except for calls that use a throwaway synthetic PIN, name the limitation in the README, and tell David before any further call. |
+| C-9 | Does the Edge runtime let the function post OTLP JSON to Langfuse, does the span land on the same trace as the assistant's turns, and does an unawaited `fetch` finish after the response? (Should tier) | Day 3, 45 min, only when the Must tier is green | Span lands on its own trace: the conversation ID or the hash is wrong; compare with `scripts/trace-id.sh`. Unawaited `fetch` is cut off: await it under the 300 ms cap (§10.5). Runtime blocks the call or Langfuse refuses OTLP JSON: try protobuf, then drop Layer 2 and keep Layer 1. |
 
 Record each result in `docs/DEVLOG.md` and in `CLAUDE.md`'s unverified list.
 
@@ -579,10 +614,11 @@ hr-leave-assistant/                                # created by new-func
   src/actors/employee-leave.ts  src/actors/hr-desk.ts  src/actors/caller-profile.ts
   src/domain/leave.ts  src/domain/time.ts  src/domain/profile.ts
   src/lib/log.ts  src/lib/auth.ts  src/lib/signature.ts  src/lib/identity.ts   # pin hash, token
+  src/lib/langfuse.ts          # trace ID, span allowlist, best-effort OTLP export (Should tier)
   src/config/default-profile.ts  src/config/default-employees.ts
   tests/
 assistant/ assistant.json  instructions.md
-scripts/   seed.sh  smoke.sh  race.sh  probe.sh  trace.sh  export-assistant.sh
+scripts/   seed.sh  smoke.sh  race.sh  probe.sh  trace.sh  trace-id.sh  export-assistant.sh
 ```
 
 Dependency direction: routes and tools call domain functions and actor stubs; domain code imports nothing from the platform.
@@ -651,10 +687,11 @@ Every row needs real evidence before the README claims it.
 | 4a Edge Function, `telnyx-edge ship` | §4 | Ship output, deployment list, live URL. |
 | 4b KV | §8.4 | `kv key put` of the flag followed by a rerouted call with no ship in between; `kv: "hit"` in logs. |
 | 4c Stateful Actor | §8.1, §8.2 | `race.sh` output: five winners in twenty and a balance that never goes negative; three counted failures out of ten parallel wrong PINs; count rises by two for two parallel calls; data present after a redeploy. |
-| 5 Logs, extra signal, one-minute detection, real bug | §10 | Log sample; `metrics` and `/admin/stats` output; timed outage drill with the alert time; incident file. |
+| 5 Logs, extra signal, one-minute detection, real bug | §10 | Log sample; `metrics` and `/admin/stats` output; timed outage drill with the alert time; incident file; a Langfuse trace of one call (turns, and the function's tool spans when Layer 2 is built) with its trace ID, and the C-8 result on the PIN. |
 | 6 OpenCode on Telnyx inference | §14.2 | `.opencode/opencode.json`, `opencode auth list` output, DEVLOG with model IDs and review lines. |
 | 7 Public deployment and documentation | §14 | Phone number, URLs, README with one synthetic test employee number and PIN, DEMO.md. |
 | Stretch, claimed only with proof | Variable comparison edges; KV feature flag; custom variables that route; `call_ref` correlation | The rows above already produce this evidence. |
+| Stretch: distributed tracing across Assistant, Function, and actors | Layer 2 of §10.5: one trace ID shared by the assistant's turns and the function's tool spans, joined to logs by `conversation_id` and `call_ref` | Claim only after C-9 shows both on one trace. Actor hops are not separate spans; they show as `actor_ms`. |
 
 ## 16. Cut from revisions 1.1 and 2.0
 
@@ -673,6 +710,7 @@ Listed in the README as production hardening. The archive holds the design for t
 | Other leave types, half days, carry-over, edits | Annual leave, whole days; cancel and re-apply | no archive design |
 | Team coverage limits across employees | None | no archive design |
 | HR information system as the source of balances | Synthetic roster in the actor | no archive design |
+| Langfuse prompt management (`prompt_name`, `prompt_sync`), scores, evaluations, dashboards, alerts, per-actor spans, a Langfuse SDK | Traces only (§10.5); prompts stay in `assistant/instructions.md` and git | no archive design |
 | Two-step hold and confirm protocol for writes | One idempotent `apply_leave` after a spoken readback | archive v1.1 §§8.3–8.4, 9.2–9.3 |
 
 ## 17. Sources
@@ -695,3 +733,5 @@ Retrieved 2026-11-10 unless noted. Saved copies in `/private/tmp/telnyx-*` are d
 | S16 | [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) | v1 `@modelcontextprotocol/sdk` (`v1.x` branch) web-standard Streamable HTTP transport; v2 on `main` is a fallback only. |
 | S21 | [Receiving webhooks](https://developers.telnyx.com/docs/development/api-fundamentals/webhooks/receiving-webhooks.md) | Raw-body Ed25519 verification. |
 | S22 | [Edge Compute observability](https://developers.telnyx.com/docs/edge-compute/observability/index.md) (retrieved 2026-11-11) | Runtime and invocation logs, metrics, deployment history. Replaces the challenge's dead "Logs & Metrics" link. |
+| S23 | [Agent observability](https://developers.telnyx.com/docs/inference/ai-assistants/agent-observability.md) (read through the vault page `wiki/telnyx/assistants/assistants-agent-observability-langfuse.md`, mirrored 2026-11-11) | `observability_settings`, what is traced, the deterministic trace ID, traces cover webhook tools. |
+| S24 | Langfuse [Public API](https://langfuse.com/docs/api-and-data-platform/features/public-api) and [OpenTelemetry integration](https://langfuse.com/integrations/native/opentelemetry) (retrieved 2026-11-12) | Legacy ingestion deprecated and sunset 2026-11-16 on Cloud; OTLP path `/api/public/otel/v1/traces`, Basic auth, JSON or protobuf, `x-langfuse-ingestion-version: 4`, attribute keys. Does not say how to join an existing trace ID; C-9 tests it. |
