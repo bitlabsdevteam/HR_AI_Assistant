@@ -15,7 +15,7 @@ binding = "CALLER_PROFILE"
 type = "CallerProfile"
 
 [storage.kv.HR_KV]
-id = "37d4a3f6-3f55-432c-9724-f9813f7600c2" # Placeholder for local dev
+id = "1b0b0a50-c921-498d-9916-ec3f085da147"
 
 [[secrets]]
 binding = "MCP_BEARER"
@@ -34,5 +34,5 @@ binding = "TELNYX_PUBLIC_KEY"
 name = "HRLEAVE_TELNYX_PUBLIC_KEY"
 
 [edge_compute]
-func_id = "90d2bab3-275f-4c0f-98e9-3f7fe75c8771" # Placeholder for local dev
+func_id = "903aedd3-9771-4f31-ad51-2d4160cd7127"
 func_name = "hr-leave-assistant"

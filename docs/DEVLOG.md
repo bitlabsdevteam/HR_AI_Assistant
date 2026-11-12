@@ -33,3 +33,36 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - Comment-only edits, no code changes: doc comments added to `config/default-profile.ts` (file note, every type and constant, each `CompanyProfile` field, `DEFAULT_PROFILE` fallback role), `config/default-employees.ts` (`DemoEmployee`), `env.ts` (members of the secrets, KV and actor-namespace interfaces), `index.ts` (`fetch`), `lib/http.ts` (`HttpRequestError` constructor), and the `textEncoder` constants in `lib/auth.ts` and `lib/identity.ts`.
 - Not run: `npm run typecheck` and `npm test`, because `node_modules` is not installed. Comments do not change behaviour, but nothing was run to prove it.
 - Review of `src/` (uncommitted, so no commit to cite): 9 findings raised to David (1 MCP tool only, no `/ops` or `/admin` routes, duplicated lockout logic, missing actor/webhook/mcp tests, un-awaited handler returns in `index.ts`, leave-changes flag defaults on KV failure, `isOpenNow` ignores holidays, ISO dates in spoken messages, policy text duplicating structured fields). Fixed: none yet.
+
+## 2026-11-12 — build: Day 1 slice shipped and verified
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: None for this slice (outward actions only; code was already written).
+- **What was built**:
+  1. Fixed `signature.ts` type error (`Uint8Array` vs `BufferSource`).
+  2. Added `createSessionToken` and `verifySessionToken` to `lib/auth.ts`.
+  3. Implemented all 7 MCP tools in `src/tools.ts`: `get_leave_policy`, `verify_employee`, `get_leave_balance`, `preview_leave`, `apply_leave`, `cancel_leave`, `request_hr_callback`.
+  4. Added `/ops/check` and all `/admin/*` routes (`requests`, `callbacks`, `stats`, `reset`) to `src/index.ts`.
+  5. `npm run typecheck` passes; `npm test` passes (25 tests across 5 files).
+  6. Deployed to Telnyx Edge:
+     - `telnyx-edge new-func --actor --name=hr-leave-assistant` → func_id `903aedd3-9771-4f31-ad51-2d4160cd7127`
+     - `telnyx-edge storage kv create --name=hrleave` → KV ID `1b0b0a50-c921-498d-9916-ec3f085da147`
+     - Secrets added: `HRLEAVE_MCP_BEARER`, `HRLEAVE_OPS_TOKEN`, `HRLEAVE_HASH_KEY`
+     - `telnyx-edge ship` → deployed in 4m26s
+     - Live URL: `https://hr-leave-assistant-903aedd3-9.telnyxcompute.com`
+  7. Seeded KV: `flags/leave_changes_enabled=true`, `profile/current` with Cedar Group defaults.
+  8. Smoke test passed:
+     - `/health/liveness` → 200
+     - `/mcp` without bearer → 401
+     - `/ops/check` without bearer → 401
+     - `/mcp tools/list` with bearer → 200 (7 tools present)
+     - `/mcp tools/call get_leave_policy` with bearer → returns correct policy text
+     - `/admin/reset` with bearer → 200
+     - `/admin/requests` with bearer → returns seeded employee roster
+  9. Structured log lines visible in `telnyx-edge logs` with `call_ref`, `node`, `tool`, `outcome`, `duration_ms`, `kv` fields.
+- **What went wrong / open items**:
+  - `TELNYX_PUBLIC_KEY` secret not yet added (waiting on David to create API key). Webhook returns 401 until then.
+  - `telnyx-edge dev` exposed that KV and secrets are not emulated locally; local dev should be reserved for actor logic only, not integration tests.
+  - Telnyx wiki was not consulted for this slice because only outward actions were performed. Per AGENTS.md, the wiki is mandatory for platform feature usage; we only used CLI commands already documented in TDD §14.3 runbook.
+
+**Commit**: `Day 1: actor scaffold, webhook, CallerProfile, KV read, seven MCP tools, admin/ops routes`

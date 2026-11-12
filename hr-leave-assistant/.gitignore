@@ -5,3 +5,5 @@ coverage/
 .env.*
 .telnyx/
 *.log
+telnyx-env.d.ts
+hr-leave-assistant/
