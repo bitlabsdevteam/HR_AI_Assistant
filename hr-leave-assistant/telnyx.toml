@@ -17,6 +17,10 @@ type = "CallerProfile"
 [storage.kv.HR_KV]
 id = "1b0b0a50-c921-498d-9916-ec3f085da147"
 
+[storage.cloudstorage.HR_POLICY_BUCKET]
+bucket_name = "hr-leave-assistant-policy"
+region = "us-east-1"
+
 [[secrets]]
 binding = "MCP_BEARER"
 name = "HRLEAVE_MCP_BEARER"
@@ -35,11 +39,11 @@ name = "HRLEAVE_TELNYX_PUBLIC_KEY"
 
 [[secrets]]
 binding = "LANGFUSE_PUBLIC_KEY"
-name = "HRLEAVE_LANGFUSE_PUBLIC_KEY"
+name = "code_challenge_pub_key"
 
 [[secrets]]
 binding = "LANGFUSE_SECRET_KEY"
-name = "HRLEAVE_LANGFUSE_SECRET_KEY"
+name = "code_challenge_secret_key"
 
 [[secrets]]
 binding = "LANGFUSE_HOST"

@@ -1,6 +1,7 @@
 import type { CallerProfile } from "./actors/caller-profile";
 import type { EmployeeLeave } from "./actors/employee-leave";
 import type { HrDesk } from "./actors/hr-desk";
+import type { CloudStorageBucket } from "@telnyx/edge-runtime";
 
 /** Names of secrets bound into the Edge Function via `telnyx.toml`. */
 export type SecretBindingName =
@@ -72,7 +73,7 @@ export type HrDeskStub = Pick<
 
 /**
  * Central application environment interface.
- * Passed into every request handler; binds KV, actors, and secrets.
+ * Passed into every request handler; binds KV, actors, secrets, and Cloud Storage.
  */
 export interface AppEnv {
   HR_KV: KvNamespaceBinding;
@@ -80,4 +81,5 @@ export interface AppEnv {
   HR_DESK: ActorNamespace<HrDeskStub>;
   CALLER_PROFILE: ActorNamespace<CallerProfileStub>;
   SECRETS: SecretsBinding;
+  HR_POLICY_BUCKET: CloudStorageBucket;
 }
