@@ -5,7 +5,7 @@ import { handleDynamicVariables } from "./webhook";
 import { hasValidBearer } from "./lib/auth";
 import { loadCompanyContext } from "./lib/kv";
 import { DEFAULT_EMPLOYEES } from "./config/default-employees";
-import { employeeActorName, pinHash } from "./lib/identity";
+import { employeeActorName, pinHash, answerHash } from "./lib/identity";
 import { writeCompletionLog, type LogOutcome } from "./lib/log";
 import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 
@@ -426,11 +426,16 @@ async function handleAdminReset(request: Request, env: AppEnv): Promise<Response
       ...DEFAULT_EMPLOYEES.map(async (emp) => {
         const actorName = await employeeActorName(hashKey, emp.employeeNumber);
         const pinHashValue = await pinHash(hashKey, emp.employeeNumber, emp.pin);
+        const secretAnswerHash = emp.secretAnswer
+          ? await answerHash(hashKey, emp.employeeNumber, emp.secretAnswer)
+          : null;
         return env.EMPLOYEE_LEAVE.idFromName(actorName).reset({
           firstName: emp.firstName,
           entitlementDays: emp.entitlementDays,
           openingUsedDays: emp.openingUsedDays,
           pinHash: pinHashValue,
+          secretQuestion: emp.secretQuestion,
+          secretAnswerHash,
         });
       }),
       env.HR_DESK.idFromName("cedar").reset(),

@@ -53,7 +53,7 @@ export async function handleMcp(request: Request, env: AppEnv): Promise<Response
     }
     metadata = extractRequestMetadata(parsedBody);
 
-    const server = createHrLeaveMcpServer(env, observation);
+    const server = createHrLeaveMcpServer(env, observation, metadata.conversationId);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -202,6 +202,9 @@ async function outcomeFromMcpResponse(response: Response): Promise<LogOutcome> {
     if (typeof data?.auth_token === "string") {
       return "verified";
     }
+    if (data?.needs_secret_question === true) {
+      return "needs_secret_question";
+    }
   }
 
   return "ok";
@@ -216,6 +219,7 @@ function isToolOutcome(value: string): value is LogOutcome {
     "degraded",
     "ok",
     "verified",
+    "needs_secret_question",
     "auth_failed",
     "locked",
     "approved",
@@ -243,6 +247,7 @@ function isToolOutcome(value: string): value is LogOutcome {
 function nodeForTool(toolName: string): string {
   switch (toolName) {
     case "verify_employee":
+    case "answer_secret_question":
     case "get_leave_balance":
       return "N10";
     case "preview_leave":
