@@ -49,6 +49,10 @@ name = "code_challenge_secret_key"
 binding = "LANGFUSE_HOST"
 name = "HRLEAVE_LANGFUSE_HOST"
 
+[[secrets]]
+binding = "TELNYX_API_KEY"
+name = "HRLEAVE_TELNYX_API_KEY"
+
 [edge_compute]
 func_id = "903aedd3-9771-4f31-ad51-2d4160cd7127"
 func_name = "hr-leave-assistant"
