@@ -54,8 +54,8 @@ export interface CompletionLog {
   actor_ms?: number;
   /** Whether KV read was a hit or fell back to defaults. */
   kv?: "hit" | "fallback";
-  /** Code revision or deployment identifier. */
-  revision?: string;
+  /** What happened to the Langfuse trace export: sent, skipped, failed, or off. */
+  trace?: "sent" | "skipped" | "failed" | "off";
   /** Additional detail for debugging (e.g. "invalid_payload", "kv_fallback"). */
   detail?:
     | "invalid_payload"

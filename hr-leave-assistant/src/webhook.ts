@@ -6,6 +6,7 @@ import { callerActorName, callerPseudonym, newCallRef } from "./lib/identity";
 import { errorResponse, HttpRequestError, jsonResponse, readRawBody } from "./lib/http";
 import { loadCompanyContext } from "./lib/kv";
 import { writeCompletionLog, type CompletionLog, type LogOutcome } from "./lib/log";
+import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 import { verifyTelnyxWebhookSignature } from "./lib/signature";
 
 /** Maximum time to wait for KV and actor calls during webhook processing (2 seconds). */
@@ -19,6 +20,7 @@ const initializationEventSchema = z.object({
     payload: z.object({
       telnyx_end_user_target: z.string().min(1).max(32).optional(),
       call_control_id: z.string().min(1).max(160).optional(),
+      telnyx_conversation_id: z.string().min(1).max(200).optional(),
     }).passthrough(),
   }).passthrough(),
 }).passthrough();
@@ -52,6 +54,7 @@ export async function handleDynamicVariables(
   let kv: "hit" | "fallback" | undefined;
   let detail: CompletionLog["detail"];
   let signatureVerified = false;
+  let conversationId: string | undefined;
 
   try {
     if (request.method !== "POST") {
@@ -86,6 +89,7 @@ export async function handleDynamicVariables(
     const nowIso = now.toISOString();
     const phoneNumber = event.data.payload.telnyx_end_user_target;
     const callId = event.data.payload.call_control_id ?? event.data.id;
+    conversationId = event.data.payload.telnyx_conversation_id;
     const hashKey = await env.SECRETS.get("HASH_KEY");
 
     // Load company context and caller status in parallel, each with a deadline.
@@ -163,17 +167,35 @@ export async function handleDynamicVariables(
       500,
     );
   } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: "webhook.dynamic-variables",
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        call_ref: callRef,
+        conversation_id: conversationId,
+        node: "initialization",
+        outcome,
+        duration_ms: durationMs,
+        caller,
+      },
+    });
     writeCompletionLog({
       event: "webhook.completed",
       call_ref: callRef,
       caller,
+      conversation_id: conversationId,
       node: "initialization",
       outcome,
       status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
       actor_ms: actorMilliseconds,
       kv,
       detail,
+      trace,
     });
   }
 }

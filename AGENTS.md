@@ -13,6 +13,20 @@ Before you build, change, or debug anything that touches the Telnyx platform (Ed
 3. Name the wiki pages you read in the slice's `docs/DEVLOG.md` entry.
 4. The wiki is Telnyx's documentation, not proof for this account. If the wiki, the TDD, and observed runtime output disagree, runtime output wins; record it in `docs/DEVLOG.md` and tell David. Do not edit the wiki; Claude Code maintains it.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in this repo (bitlabsdevteam/HR_AI_Assistant). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five canonical roles. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout. See `docs/agents/domain.md`.
+
 ## Read before working
 
 | When you are about to… | Read |

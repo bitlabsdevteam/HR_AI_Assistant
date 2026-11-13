@@ -7,6 +7,7 @@ import { loadCompanyContext } from "./lib/kv";
 import { DEFAULT_EMPLOYEES } from "./config/default-employees";
 import { employeeActorName, pinHash } from "./lib/identity";
 import { writeCompletionLog, type LogOutcome } from "./lib/log";
+import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 
 // Re-export all actor classes so the runtime can instantiate them by name.
 export { CallerProfile } from "./actors/caller-profile";
@@ -153,12 +154,25 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
     outcome = "error";
     return jsonResponse({ error: { code: "unavailable", message: "Ops check failed." } }, 500);
   } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: "ops.check",
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        outcome,
+        duration_ms: durationMs,
+      },
+    });
     writeCompletionLog({
       event: "ops.completed",
       call_ref: "none",
       outcome,
       status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
+      trace,
     });
   }
 }
@@ -220,12 +234,25 @@ async function handleAdminRequests(request: Request, env: AppEnv): Promise<Respo
     outcome = "error";
     return jsonResponse({ error: { code: "unavailable", message: "Admin requests failed." } }, 500);
   } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: "admin.requests",
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        outcome,
+        duration_ms: durationMs,
+      },
+    });
     writeCompletionLog({
       event: "admin.completed",
       call_ref: "none",
       outcome,
       status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
+      trace,
     });
   }
 }
@@ -258,12 +285,25 @@ async function handleAdminCallbacks(request: Request, env: AppEnv): Promise<Resp
     outcome = "error";
     return jsonResponse({ error: { code: "unavailable", message: "Admin callbacks failed." } }, 500);
   } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: "admin.callbacks",
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        outcome,
+        duration_ms: durationMs,
+      },
+    });
     writeCompletionLog({
       event: "admin.completed",
       call_ref: "none",
       outcome,
       status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
+      trace,
     });
   }
 }
@@ -336,12 +376,25 @@ async function handleAdminStats(request: Request, env: AppEnv): Promise<Response
     outcome = "error";
     return jsonResponse({ error: { code: "unavailable", message: "Admin stats failed." } }, 500);
   } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: "admin.stats",
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        outcome,
+        duration_ms: durationMs,
+      },
+    });
     writeCompletionLog({
       event: "admin.completed",
       call_ref: "none",
       outcome,
       status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
+      trace,
     });
   }
 }
@@ -394,12 +447,25 @@ async function handleAdminReset(request: Request, env: AppEnv): Promise<Response
     outcome = "error";
     return jsonResponse({ error: { code: "unavailable", message: "Admin reset failed." } }, 500);
   } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: "admin.reset",
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        outcome,
+        duration_ms: durationMs,
+      },
+    });
     writeCompletionLog({
       event: "admin.completed",
       call_ref: "none",
       outcome,
       status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
+      trace,
     });
   }
 }

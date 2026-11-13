@@ -33,6 +33,18 @@ name = "HRLEAVE_HASH_KEY"
 binding = "TELNYX_PUBLIC_KEY"
 name = "HRLEAVE_TELNYX_PUBLIC_KEY"
 
+[[secrets]]
+binding = "LANGFUSE_PUBLIC_KEY"
+name = "HRLEAVE_LANGFUSE_PUBLIC_KEY"
+
+[[secrets]]
+binding = "LANGFUSE_SECRET_KEY"
+name = "HRLEAVE_LANGFUSE_SECRET_KEY"
+
+[[secrets]]
+binding = "LANGFUSE_HOST"
+name = "HRLEAVE_LANGFUSE_HOST"
+
 [edge_compute]
 func_id = "903aedd3-9771-4f31-ad51-2d4160cd7127"
 func_name = "hr-leave-assistant"

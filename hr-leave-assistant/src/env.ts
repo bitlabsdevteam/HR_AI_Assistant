@@ -7,7 +7,10 @@ export type SecretBindingName =
   | "MCP_BEARER"
   | "OPS_TOKEN"
   | "HASH_KEY"
-  | "TELNYX_PUBLIC_KEY";
+  | "TELNYX_PUBLIC_KEY"
+  | "LANGFUSE_PUBLIC_KEY"
+  | "LANGFUSE_SECRET_KEY"
+  | "LANGFUSE_HOST";
 
 /** Interface for reading secrets from the runtime secrets binding. */
 export interface SecretsBinding {
