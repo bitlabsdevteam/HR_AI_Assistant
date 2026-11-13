@@ -66,18 +66,23 @@ export interface McpObservation {
   call_ref?: string;
 }
 
-/** Builds a success tool result with structured content. */
+/**
+ * Builds a success tool result. The full envelope is serialized into the text
+ * block as well as structuredContent, because a client that consumes only text
+ * would otherwise never see data such as auth_token (MCP structured-content
+ * compatibility guidance). `message` is the sentence to say to the caller.
+ */
 function toolSuccess<T>(text: string, data: T): CallToolResult {
   return {
-    content: [{ type: "text", text }],
+    content: [{ type: "text", text: JSON.stringify({ ok: true, data, message: text }) }],
     structuredContent: { ok: true as const, data },
   };
 }
 
-/** Builds an error tool result with structured content. */
+/** Builds an error tool result; the text block carries the machine-readable code. */
 function toolError(code: string, message: string): CallToolResult {
   return {
-    content: [{ type: "text", text: message }],
+    content: [{ type: "text", text: JSON.stringify({ ok: false, code, message }) }],
     structuredContent: { ok: false as const, code, message },
     isError: true,
   };
@@ -226,7 +231,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
     {
       title: "Verify employee",
       description:
-        "Verify an employee by their four-digit employee number and four-digit PIN. Returns an auth_token on success. This is the only tool that takes an employee number.",
+        "Verify an employee by their four-digit employee number and four-digit PIN. On success the JSON result contains data.auth_token, the session token to pass unchanged as auth_token to every other signed-in tool. Never say the token or the PIN aloud. This is the only tool that takes an employee number.",
       inputSchema: verifyEmployeeInputSchema,
     },
     async ({ employee_number, pin }): Promise<CallToolResult> =>
@@ -238,7 +243,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
     "get_leave_balance",
     {
       title: "Get leave balance",
-      description: "Get the signed-in employee's annual leave balance and upcoming approved leave. Requires an auth_token.",
+      description: "Get the signed-in employee's annual leave balance and upcoming approved leave. Requires auth_token: the exact data.auth_token string from the verify_employee result, unchanged (never the greeting, employee number, or PIN).",
       inputSchema: getLeaveBalanceInputSchema,
     },
     async ({ auth_token }): Promise<CallToolResult> => {
@@ -282,7 +287,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
     "preview_leave",
     {
       title: "Preview leave",
-      description: "Preview how many working days a leave request would use and whether it fits the policy and balance. Requires an auth_token.",
+      description: "Preview how many working days a leave request would use and whether it fits the policy and balance. Requires auth_token: the exact data.auth_token string from the verify_employee result, unchanged.",
       inputSchema: previewLeaveInputSchema,
     },
     async ({ auth_token, start_date, end_date }): Promise<CallToolResult> => {
@@ -351,7 +356,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
     "apply_leave",
     {
       title: "Apply for leave",
-      description: "Apply for annual leave. Requires an auth_token, start date, and end date. The system counts working days and checks policy, overlap, and balance. Reads back dates before confirming.",
+      description: "Apply for annual leave. Requires auth_token (the exact data.auth_token string from verify_employee, unchanged), start date, and end date. The system counts working days and checks policy, overlap, and balance. Reads back dates before confirming.",
       inputSchema: applyLeaveInputSchema,
     },
     async ({ auth_token, reason, start_date, end_date, call_ref }): Promise<CallToolResult> => {
@@ -432,7 +437,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
     "cancel_leave",
     {
       title: "Cancel leave",
-      description: "Cancel approved leave that has not started yet. Requires an auth_token and the start date of the leave to cancel.",
+      description: "Cancel approved leave that has not started yet. Requires auth_token (the exact data.auth_token string from verify_employee, unchanged) and the start date of the leave to cancel.",
       inputSchema: cancelLeaveInputSchema,
     },
     async ({ auth_token, start_date, call_ref }): Promise<CallToolResult> => {

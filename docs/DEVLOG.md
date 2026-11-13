@@ -143,3 +143,12 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 **Commits**:
 - `fix: remove secret-question MFA, fix token conversation binding in all tools`
 
+
+## 2026-11-14 — fix #34: token handoff (Claude-authored, disclosed exception)
+
+- **Provenance**: Claude Code (Sonnet 5.5, `claude-sonnet-5-5`) wrote this code at David's explicit request, against the project rule that OpenCode writes all solution code. Disclosed exception; needs reviewer attention accordingly.
+- **Change**: `toolSuccess` and `toolError` in `hr-leave-assistant/src/tools.ts` now serialize the full envelope (`{ ok, data, message }` / `{ ok, code, message }`) into the text block as well as `structuredContent`, so a text-only consumer sees `data.auth_token`. Tool descriptions say `auth_token` is the exact `data.auth_token` from `verify_employee`. Signature, expiry and conversation-binding checks are untouched.
+- **Tests**: `tests/token-handoff.test.ts` drives the real MCP server through the SDK in-memory transport: token read from text completes the balance lookup; employee number, greeting and PIN as token are rejected without reaching `summary`; a token from another conversation is rejected. 5 of 6 fail without the fix. `npm run typecheck` clean, `npm test` 62 passed.
+- **Not verified**: no deploy, no voice call. Acceptance (`verify_employee` verified then `get_leave_balance` ok on one conversation, no token spoken or logged) is still open.
+- **Portal step, not in this PR**: append to the `Verify_employee` node instructions: "After `verify_employee` succeeds, read `data.auth_token` from its JSON result. Pass that exact string unchanged as `auth_token` to `get_leave_balance` immediately. Never substitute the welcome greeting, the full response object, an employee number or PIN. Never invent, shorten or speak the token. If the result has no token, treat it as a tool failure and use the existing fallback. Read the remaining days only after `get_leave_balance` succeeds. If balance returns `unauthenticated`, verify once more; after another failure use the HR fallback."
+- **Fallback if exact-copy is still unreliable**: conversation-keyed actor session (TDD 7.1 / C-7), separate issue.
