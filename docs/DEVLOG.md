@@ -113,3 +113,33 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - Full end-to-end webhook test requires a real Telnyx `assistant.initialization` event with a valid Ed25519 signature.
 
 **Commit**: `Day 1 deployment: telnyx.toml with real IDs, KV seeded, smoke scripts, DEVLOG entry`
+
+## 2026-11-13 — build: remove secret-question MFA and fix session-token conversation binding
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: None (platform features unchanged; only code edits)
+- **What was built**:
+  1. Removed `answer_secret_question` tool from MCP server (`src/tools.ts`):
+     - Deleted `handleAnswerSecretQuestion` function.
+     - Removed tool registration and Zod schema.
+     - Removed imports of `createVerificationToken`, `verifyVerificationToken`, and `answerHash`.
+  2. Simplified `verify_employee` to issue `auth_token` immediately after PIN verification, bypassing the secret-question branch entirely. Description updated to match.
+  3. Removed `answer_secret_question` from `nodeForTool` and `needs_secret_question` from `outcomeFromMcpResponse` and `isToolOutcome` in `src/mcp.ts`.
+  4. Removed `needs_secret_question` from `LogOutcome` type in `src/lib/log.ts`.
+  5. Updated `tests/tools-secret.test.ts`:
+     - Changed the secret-question test to expect `auth_token` directly.
+     - Removed all 5 `handleAnswerSecretQuestion` tests.
+     - Removed unused imports.
+  6. **Critical bug fix**: `resolveEmployeeFromToken` in all employee-scoped tools (`get_leave_balance`, `preview_leave`, `apply_leave`, `cancel_leave`) was called with `undefined` for `conversationId`, causing token verification to use `bind: "none"`. Since `verify_employee` and `answer_secret_question` (now removed) created tokens with the actual `conversationId`, the signature mismatch caused `unauthenticated` on every subsequent tool call. Fixed by passing the closure `conversationId` through to all four tool handlers.
+  7. `npm run typecheck` passes; `npm test` passes (56 tests across 9 files).
+  8. `telnyx-edge ship` → deployed in 4m10s.
+  9. Smoke test passed: `tools/list` returns 7 tools (`answer_secret_question` absent).
+  10. Verified end-to-end flow:
+      - `verify_employee(1001, 1111)` → `auth_token` + "Welcome, Alex." (outcome: `verified`)
+      - `get_leave_balance(auth_token)` → "You have 8 days remaining out of 14 days annual leave." (outcome: `ok`)
+      - Token conversation binding works correctly across both calls.
+- **What went wrong / open items**: The conversation-binding bug was latent until the token-creation fix from the prior session exposed it. It never showed in unit tests because mocks don\'t verify HMAC signatures.
+
+**Commits**:
+- `fix: remove secret-question MFA, fix token conversation binding in all tools`
+

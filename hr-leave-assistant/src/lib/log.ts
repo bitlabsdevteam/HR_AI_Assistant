@@ -7,7 +7,6 @@ export type LogOutcome =
   | "degraded"
   | "ok"
   | "verified"
-  | "needs_secret_question"
   | "auth_failed"
   | "locked"
   | "approved"

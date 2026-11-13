@@ -9,9 +9,8 @@ import { validateLeaveDates, workingDaysInclusive } from "./domain/leave";
 import type { AppEnv } from "./env";
 import { createSessionToken, verifySessionToken } from "./lib/auth";
 import { loadCompanyContext, loadCompanyProfile } from "./lib/kv";
-import { employeeActorName, employeePseudonym, leaveRequestKey, newReference, pinHash, callbackRequestKey, answerHash } from "./lib/identity";
+import { employeeActorName, employeePseudonym, leaveRequestKey, newReference, pinHash, callbackRequestKey } from "./lib/identity";
 import { resolvePolicyAnswer } from "./lib/bucket-policy";
-import { createVerificationToken, verifyVerificationToken } from "./lib/verification-token";
 
 /** Zod schema for get_leave_policy tool input. */
 const getLeavePolicyInputSchema = z.object({ topic: policyTopicSchema }).strict();
@@ -20,12 +19,6 @@ const getLeavePolicyInputSchema = z.object({ topic: policyTopicSchema }).strict(
 const verifyEmployeeInputSchema = z.object({
   employee_number: z.string().regex(/^\d{4}$/),
   pin: z.string().regex(/^\d{4}$/),
-}).strict();
-
-/** Zod schema for answer_secret_question tool input. */
-const answerSecretQuestionInputSchema = z.object({
-  verification_token: z.string().min(1).max(200),
-  answer: z.string().min(1).max(100),
 }).strict();
 
 /** Zod schema for get_leave_balance tool input. */
@@ -177,80 +170,10 @@ export async function handleVerifyEmployee(
     return toolError("auth_failed", `That didn't match. You have ${result.attemptsLeft} tries left.`);
   }
 
-  if (employee.secretQuestion) {
-    const verificationToken = await createVerificationToken({
-      employeeNumber: employee.employeeNumber,
-      hashKey,
-      conversationId: conversationId ?? "none",
-      nowSeconds: Math.floor(Date.now() / 1_000),
-    });
-    return toolSuccess(
-      `For extra security, please answer your secret question: ${employee.secretQuestion}`,
-      { needs_secret_question: true as const, question: employee.secretQuestion, verification_token: verificationToken },
-    );
-  }
-
   const token = await createSessionToken({
     employeeNumber: employee.employeeNumber,
     hashKey,
-    bind: "none",
-    nowSeconds: Math.floor(Date.now() / 1_000),
-  });
-
-  return toolSuccess(
-    `Welcome, ${result.firstName}.`,
-    { auth_token: token, first_name: result.firstName },
-  );
-}
-
-/**
- * Handler for answer_secret_question tool. Exported for testing.
- */
-export async function handleAnswerSecretQuestion(
-  env: AppEnv,
-  observation: McpObservation,
-  conversationId: string | undefined,
-  args: { verification_token: string; answer: string },
-): Promise<CallToolResult> {
-  const { verification_token, answer } = args;
-  const hashKey = await env.SECRETS.get("HASH_KEY");
-  if (!hashKey) {
-    return toolError("unavailable", "Sign-in is unavailable right now. Please ask for an HR callback.");
-  }
-
-  const nowSeconds = Math.floor(Date.now() / 1_000);
-  const bind = conversationId ?? "none";
-  const employeeNumber = await verifyVerificationToken({
-    token: verification_token,
-    hashKey,
-    conversationId: bind,
-    nowSeconds,
-  });
-
-  if (!employeeNumber) {
-    return toolError("unauthenticated", "Your verification session has expired. Please sign in again with your employee number and PIN.");
-  }
-
-  observation.emp = await employeePseudonym(hashKey, employeeNumber);
-  const suppliedAnswerHash = await answerHash(hashKey, employeeNumber, answer);
-  const nowIso = new Date().toISOString();
-  const actorName = await employeeActorName(hashKey, employeeNumber);
-  const result = await withActorTiming(observation, () =>
-    env.EMPLOYEE_LEAVE.idFromName(actorName).verifySecretAnswer(suppliedAnswerHash, nowIso),
-  );
-
-  if (result.status === "locked") {
-    return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
-  }
-
-  if (result.status === "failed") {
-    return toolError("auth_failed", `That didn't match. You have ${result.attemptsLeft} tries left.`);
-  }
-
-  const token = await createSessionToken({
-    employeeNumber,
-    hashKey,
-    bind: "none",
+    bind: conversationId ?? "none",
     nowSeconds: Math.floor(Date.now() / 1_000),
   });
 
@@ -263,7 +186,7 @@ export async function handleAnswerSecretQuestion(
 /**
  * Creates and configures the HR Leave MCP server.
  *
- * Registers all seven tools for the Telnyx AI Assistant.
+ * Registers all tools for the Telnyx AI Assistant.
  */
 export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation, conversationId?: string): McpServer {
   const server = new McpServer({
@@ -303,24 +226,11 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
     {
       title: "Verify employee",
       description:
-        "Verify an employee by their four-digit employee number and four-digit PIN. If the employee has no secret question, returns an auth_token. If they do, returns a verification_token and asks the secret question next. This is the only tool that takes an employee number.",
+        "Verify an employee by their four-digit employee number and four-digit PIN. Returns an auth_token on success. This is the only tool that takes an employee number.",
       inputSchema: verifyEmployeeInputSchema,
     },
     async ({ employee_number, pin }): Promise<CallToolResult> =>
       handleVerifyEmployee(env, observation, conversationId, { employee_number, pin }),
-  );
-
-  // Tool: answer_secret_question
-  server.registerTool(
-    "answer_secret_question",
-    {
-      title: "Answer secret question",
-      description:
-        "Answer the secret question after verifying a PIN. Requires the verification_token from verify_employee and the answer text.",
-      inputSchema: answerSecretQuestionInputSchema,
-    },
-    async ({ verification_token, answer }): Promise<CallToolResult> =>
-      handleAnswerSecretQuestion(env, observation, conversationId, { verification_token, answer }),
   );
 
   // Tool: get_leave_balance
@@ -332,7 +242,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
       inputSchema: getLeaveBalanceInputSchema,
     },
     async ({ auth_token }): Promise<CallToolResult> => {
-      const resolved = await resolveEmployeeFromToken(env, auth_token, undefined, observation);
+      const resolved = await resolveEmployeeFromToken(env, auth_token, conversationId, observation);
       if (!resolved) {
         return toolError("unauthenticated", "Please sign in first with your employee number and PIN.");
       }
@@ -376,7 +286,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
       inputSchema: previewLeaveInputSchema,
     },
     async ({ auth_token, start_date, end_date }): Promise<CallToolResult> => {
-      const resolved = await resolveEmployeeFromToken(env, auth_token, undefined, observation);
+      const resolved = await resolveEmployeeFromToken(env, auth_token, conversationId, observation);
       if (!resolved) {
         return toolError("unauthenticated", "Please sign in first with your employee number and PIN.");
       }
@@ -445,7 +355,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
       inputSchema: applyLeaveInputSchema,
     },
     async ({ auth_token, reason, start_date, end_date, call_ref }): Promise<CallToolResult> => {
-      const resolved = await resolveEmployeeFromToken(env, auth_token, undefined, observation);
+      const resolved = await resolveEmployeeFromToken(env, auth_token, conversationId, observation);
       if (!resolved) {
         return toolError("unauthenticated", "Please sign in first with your employee number and PIN.");
       }
@@ -526,7 +436,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
       inputSchema: cancelLeaveInputSchema,
     },
     async ({ auth_token, start_date, call_ref }): Promise<CallToolResult> => {
-      const resolved = await resolveEmployeeFromToken(env, auth_token, undefined, observation);
+      const resolved = await resolveEmployeeFromToken(env, auth_token, conversationId, observation);
       if (!resolved) {
         return toolError("unauthenticated", "Please sign in first with your employee number and PIN.");
       }
