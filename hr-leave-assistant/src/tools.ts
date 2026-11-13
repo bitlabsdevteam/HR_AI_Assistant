@@ -42,6 +42,7 @@ const previewLeaveInputSchema = z.object({
 /** Zod schema for apply_leave tool input. */
 const applyLeaveInputSchema = z.object({
   auth_token: z.string().min(1).max(100),
+  reason: z.string().min(1).max(200),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   call_ref: z.string().regex(/^c_[0-9a-f]{12}$/).optional(),
@@ -441,7 +442,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
       description: "Apply for annual leave. Requires an auth_token, start date, and end date. The system counts working days and checks policy, overlap, and balance. Reads back dates before confirming.",
       inputSchema: applyLeaveInputSchema,
     },
-    async ({ auth_token, start_date, end_date, call_ref }): Promise<CallToolResult> => {
+    async ({ auth_token, reason, start_date, end_date, call_ref }): Promise<CallToolResult> => {
       const resolved = await resolveEmployeeFromToken(env, auth_token, undefined, observation);
       if (!resolved) {
         return toolError("unauthenticated", "Please sign in first with your employee number and PIN.");
@@ -483,6 +484,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
           start: start_date,
           end: end_date,
           days: validation.workingDays,
+          reason,
           requestKey,
           callRef: call_ref ?? null,
           nowIso: now.toISOString(),
