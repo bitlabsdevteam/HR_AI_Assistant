@@ -300,7 +300,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
     {
       title: "Verify employee",
       description:
-        "Verify an employee by their four-digit employee number and four-digit PIN. Returns an auth_token on success. This is the only tool that takes an employee number.",
+        "Verify an employee by their four-digit employee number and four-digit PIN. If the employee has no secret question, returns an auth_token. If they do, returns a verification_token and asks the secret question next. This is the only tool that takes an employee number.",
       inputSchema: verifyEmployeeInputSchema,
     },
     async ({ employee_number, pin }): Promise<CallToolResult> =>
