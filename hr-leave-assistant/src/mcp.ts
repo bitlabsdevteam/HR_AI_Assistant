@@ -251,7 +251,7 @@ function nodeForTool(toolName: string): string {
       return "N35";
     case "cancel_leave":
       return "N40";
-    case "get_leave_policy":
+    case "get_hr_policy":
       return "N50";
     case "request_hr_callback":
       return "N70";

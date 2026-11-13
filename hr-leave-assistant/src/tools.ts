@@ -3,7 +3,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { DEFAULT_EMPLOYEES } from "./config/default-employees";
 import type { PolicyTopic } from "./config/default-profile";
-import { policyAnswer, policyTopicSchema } from "./domain/profile";
+import { policyTopicSchema } from "./domain/profile";
+import { searchPolicy } from "./lib/hr-policy";
 import { spokenIsoDate, todayIsoInTimeZone } from "./domain/time";
 import { validateLeaveDates, workingDaysInclusive } from "./domain/leave";
 import type { AppEnv } from "./env";
@@ -11,8 +12,21 @@ import { createSessionToken, verifySessionToken } from "./lib/auth";
 import { loadCompanyContext, loadCompanyProfile } from "./lib/kv";
 import { employeeActorName, employeePseudonym, leaveRequestKey, newReference, pinHash, callbackRequestKey } from "./lib/identity";
 
-/** Zod schema for get_leave_policy tool input. */
-const getLeavePolicyInputSchema = z.object({ topic: policyTopicSchema }).strict();
+/** Zod schema for get_hr_policy tool input. Either question or topic must be provided. */
+const getHrPolicyInputSchema = z.object({
+  question: z.string().min(1).max(200).optional(),
+  topic: policyTopicSchema.optional(),
+}).strict();
+
+/** Maps a known policy topic to a canonical search query for the similarity-search API. */
+const TOPIC_TO_QUERY: Record<PolicyTopic, string> = {
+  entitlement: "annual leave entitlement policy",
+  notice: "leave notice period and application requirements",
+  carry_over: "leave carryover and unused leave policy",
+  holidays: "company holidays and public holiday policy",
+  process: "leave application and cancellation process",
+  hours: "HR desk opening hours and contact times",
+};
 
 /** Zod schema for verify_employee tool input. */
 const verifyEmployeeInputSchema = z.object({
@@ -134,27 +148,54 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
     version: "0.1.0",
   });
 
-  // Tool: get_leave_policy
+  // Tool: get_hr_policy
   server.registerTool(
-    "get_leave_policy",
+    "get_hr_policy",
     {
-      title: "Get leave policy",
+      title: "Get HR policy",
       description:
-        "Use this tool to answer an employee's general leave-policy or HR-hours question without signing in. Choose the single topic that best matches the question.",
-      inputSchema: getLeavePolicyInputSchema,
+        "Search the company HR handbook for a policy answer. No sign-in required. Provide either a free-form question or choose a topic.",
+      inputSchema: getHrPolicyInputSchema,
     },
-    async ({ topic }): Promise<CallToolResult> => {
+    async ({ question, topic }): Promise<CallToolResult> => {
+      let query: string;
+      if (question) {
+        query = question;
+      } else if (topic) {
+        query = TOPIC_TO_QUERY[topic];
+      } else {
+        return toolError("invalid_input", "Please provide a question or choose a topic.");
+      }
+
       try {
-        const { profile, kv } = await loadCompanyProfile(env);
-        observation.kv = kv;
-        const typedTopic = topic as PolicyTopic;
-        const answer = policyAnswer(profile, typedTopic);
-        return toolSuccess(answer, { topic: typedTopic, answer });
+        const result = await searchPolicy(env, query);
+        if (!result.ok) {
+          if (result.code === "not_found") {
+            return toolError(
+              "not_found",
+              "I couldn't find a policy that matches your question. You can ask for an HR callback.",
+            );
+          }
+          return toolError("unavailable", "HR policy search is unavailable right now. Please ask for an HR callback.");
+        }
+
+        const chunks = result.results;
+        const textLines = chunks
+          .map(
+            (c, i) =>
+              `Result ${i + 1} (from ${c.metadata.filename}, certainty ${Math.round(c.metadata.certainty * 100)}%):\n${c.document_chunk}`,
+          )
+          .join("\n\n");
+
+        return toolSuccess(textLines, {
+          chunks: chunks.map((c) => ({
+            document_chunk: c.document_chunk,
+            filename: c.metadata.filename,
+            certainty: c.metadata.certainty,
+          })),
+        });
       } catch {
-        return toolError(
-          "unavailable",
-          "Leave policy is unavailable right now. Please ask for an HR callback.",
-        );
+        return toolError("unavailable", "HR policy search is unavailable right now. Please ask for an HR callback.");
       }
     },
   );
