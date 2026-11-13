@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleVerifyEmployee, handleAnswerSecretQuestion } from "../src/tools";
-import { createVerificationToken } from "../src/lib/verification-token";
+import { handleVerifyEmployee } from "../src/tools";
 import type { AppEnv, EmployeeLeaveStub, HrDeskStub } from "../src/env";
 import type { CloudStorageBucket } from "@telnyx/edge-runtime";
 
@@ -146,8 +145,8 @@ describe("handleVerifyEmployee", () => {
     });
   });
 
-  it("returns needs_secret_question when PIN is correct and employee has a secret question", async () => {
-    // Default employees 1001-1004 all have secret questions in default-employees.ts
+  it("returns auth_token when PIN is correct even if employee has a secret question", async () => {
+    // Secret-question step is removed from the MCP flow; verify_employee issues the token directly.
     const env = await createMockEnv();
     const observation: Record<string, unknown> = {};
     const result = await handleVerifyEmployee(env, observation, "conv_abc", {
@@ -158,9 +157,8 @@ describe("handleVerifyEmployee", () => {
     expect(result.structuredContent).toMatchObject({
       ok: true,
       data: {
-        needs_secret_question: true,
-        question: "What is your favourite colour?",
-        verification_token: expect.stringMatching(/^temp1\.1001\.conv_abc\.\d+\.[0-9a-f]{32}$/),
+        auth_token: expect.stringMatching(/^v1\.1001\.\d+\.[0-9a-f]{32}$/),
+        first_name: "Alex",
       },
     });
   });
@@ -198,129 +196,6 @@ describe("handleVerifyEmployee", () => {
     expect(result.structuredContent).toMatchObject({
       ok: false,
       code: "locked",
-    });
-  });
-});
-
-describe("handleAnswerSecretQuestion", () => {
-  it("returns auth_token on correct answer", async () => {
-    const env = await createMockEnv();
-    const observation: Record<string, unknown> = {};
-    const nowSeconds = Math.floor(Date.now() / 1_000);
-    const token = await createVerificationToken({
-      employeeNumber: "1001",
-      hashKey: HASH_KEY,
-      conversationId: "conv_abc",
-      nowSeconds,
-    });
-
-    const result = await handleAnswerSecretQuestion(env, observation, "conv_abc", {
-      verification_token: token,
-      answer: "Blue",
-    });
-
-    expect(result.structuredContent).toMatchObject({
-      ok: true,
-      data: {
-        auth_token: expect.stringMatching(/^v1\.1001\.\d+\.[0-9a-f]{32}$/),
-        first_name: "Alex",
-      },
-    });
-  });
-
-  it("returns auth_failed on wrong answer", async () => {
-    const env = await createMockEnv({
-      employee: {
-        verifySecretAnswer: async () => ({ status: "failed" as const, attemptsLeft: 2 }),
-      },
-    });
-    const observation: Record<string, unknown> = {};
-    const nowSeconds = Math.floor(Date.now() / 1_000);
-    const token = await createVerificationToken({
-      employeeNumber: "1001",
-      hashKey: HASH_KEY,
-      conversationId: "conv_abc",
-      nowSeconds,
-    });
-
-    const result = await handleAnswerSecretQuestion(env, observation, "conv_abc", {
-      verification_token: token,
-      answer: "Red",
-    });
-
-    expect(result.structuredContent).toMatchObject({
-      ok: false,
-      code: "auth_failed",
-    });
-  });
-
-  it("returns locked after 3 failed attempts", async () => {
-    const env = await createMockEnv({
-      employee: {
-        verifySecretAnswer: async () => ({ status: "locked" as const, minutesLeft: 15 }),
-      },
-    });
-    const observation: Record<string, unknown> = {};
-    const nowSeconds = Math.floor(Date.now() / 1_000);
-    const token = await createVerificationToken({
-      employeeNumber: "1001",
-      hashKey: HASH_KEY,
-      conversationId: "conv_abc",
-      nowSeconds,
-    });
-
-    const result = await handleAnswerSecretQuestion(env, observation, "conv_abc", {
-      verification_token: token,
-      answer: "Red",
-    });
-
-    expect(result.structuredContent).toMatchObject({
-      ok: false,
-      code: "locked",
-    });
-  });
-
-  it("returns unauthenticated for expired token", async () => {
-    const env = await createMockEnv();
-    const observation: Record<string, unknown> = {};
-    const token = await createVerificationToken({
-      employeeNumber: "1001",
-      hashKey: HASH_KEY,
-      conversationId: "conv_abc",
-      nowSeconds: 1_700_000_000,
-    });
-
-    const result = await handleAnswerSecretQuestion(env, observation, "conv_abc", {
-      verification_token: token,
-      answer: "Blue",
-    });
-
-    // Token is expired because Date.now() is much later than 1_700_000_000
-    expect(result.structuredContent).toMatchObject({
-      ok: false,
-      code: "unauthenticated",
-    });
-  });
-
-  it("returns unauthenticated for wrong conversation", async () => {
-    const env = await createMockEnv();
-    const observation: Record<string, unknown> = {};
-    const nowSeconds = Math.floor(Date.now() / 1_000);
-    const token = await createVerificationToken({
-      employeeNumber: "1001",
-      hashKey: HASH_KEY,
-      conversationId: "conv_abc",
-      nowSeconds,
-    });
-
-    const result = await handleAnswerSecretQuestion(env, observation, "wrong_conv", {
-      verification_token: token,
-      answer: "Blue",
-    });
-
-    expect(result.structuredContent).toMatchObject({
-      ok: false,
-      code: "unauthenticated",
     });
   });
 });

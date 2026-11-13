@@ -67,6 +67,44 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 
 **Commit**: `Day 1: actor scaffold, webhook, CallerProfile, KV read, seven MCP tools, admin/ops routes`
 
+## 2026-11-13 — build: ticket #20 (secret-question MFA)
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: `Telynyx/index.md`, `Telynyx/wiki/entities/edge-functions.md`
+- **What was built**:
+  1. Added `answerHash` helper to `src/lib/identity.ts` (HMAC-SHA-256 of normalised answer).
+  2. Updated admin `/reset` in `src/index.ts` to seed `secretQuestion` and `secretAnswerHash` from `DEFAULT_EMPLOYEES` into actors.
+  3. Modified `verify_employee` tool in `src/tools.ts` to branch to secret-question MFA when employee has one configured: returns `needs_secret_question`, `question`, and `verification_token`.
+  4. Added new `answer_secret_question` MCP tool: validates verification token (conversation-bound, 2-minute expiry), hashes answer, delegates to `EmployeeLeave.verifySecretAnswer`, issues `auth_token` on success or `auth_failed`/`locked` on failure.
+  5. Updated `nodeForTool` in `src/mcp.ts` to map `answer_secret_question` to `N10`.
+  6. Added `needs_secret_question` to `LogOutcome` in `src/lib/log.ts` and `outcomeFromMcpResponse`.
+  7. Threaded `conversationId` from MCP request metadata into `createHrLeaveMcpServer`.
+  8. Extracted `handleVerifyEmployee` and `handleAnswerSecretQuestion` into exported async functions for testability.
+  9. Added `tests/tools-secret.test.ts` with 9 tests: happy path both branches, wrong PIN, locked account, correct/wrong secret answer, 3-strike lockout, expired token, wrong conversation ID.
+  10. `npm run typecheck` passes; `npm test` passes (61 tests across 9 files).
+  11. Deployed to Telnyx Edge: `telnyx-edge ship` → build succeeded after initial timeout; `telnyx-edge ship status hr-leave-assistant` confirmed success.
+  12. Smoke test passed: health check, MCP 401 without bearer, admin/ops 401 without bearer, MCP `tools/list` with bearer (8 tools present including `answer_secret_question`), MCP `get_leave_policy` with bearer, admin reset with bearer, admin requests with bearer.
+- **Code review**: Standards found 1 violation (verify_employee description outdated) and 1 smell (duplicated locked/failed/token logic in handlers); fixed description in follow-up commit.
+- **What went wrong / open items**: None.
+
+**Commits**:
+- `9313be5 feat(#20): verify_employee branches to secret question; answer_secret_question tool`
+- `e9304fc fix(#20): update verify_employee tool description for secret-question branch`
+
+## 2026-11-13 — build: re-ship with bucket config fix and Langfuse secret guard
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: `Telynyx/index.md`, `Telynyx/wiki/telnyx-build-reading-list.md`, `Telynyx/wiki/telnyx-gotchas-all.md`, `Telynyx/wiki/entities/edge-functions.md`, `Telynyx/wiki/telnyx/edge-compute/edge-compute-cli-reference.md`
+- **What was built**:
+  1. Fixed `telnyx.toml` Cloud Storage bucket name (`hr-policy` vs old `hr-leave-assistant-policy`) and region (`us-central-1` vs old `us-east-1`) to match created infrastructure.
+  2. Hardened `loadLangfuseCredentials` in `src/lib/langfuse.ts` with a `try/catch` so a missing secret binding throws no error into the request; tracing falls back to `"off"`.
+  3. `npm run typecheck` passes; `npm test` passes (61 tests across 9 files).
+  4. `telnyx-edge ship` → deployed in 4m1s. Smoke test passed: health check, MCP 401 without bearer, admin/ops 401 without bearer, MCP `tools/list` with bearer (8 tools present), MCP `get_leave_policy` with bearer, admin reset with bearer, admin requests with bearer.
+  5. `telnyx-edge logs hr-leave-assistant --since 5m` shows expected `tool.completed` log lines with `outcome: "ok"` and `trace: "off"`.
+- **What went wrong / open items**: None.
+
+**Commit**: `fix: bucket name/region in telnyx.toml and guard Langfuse secret load`
+
 ## 2026-11-12 — build: added TELNYX_PUBLIC_KEY and re-shipped
 
 - Added `HRLEAVE_TELNYX_PUBLIC_KEY` secret with the provided Ed25519 public key.
@@ -75,3 +113,42 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - Full end-to-end webhook test requires a real Telnyx `assistant.initialization` event with a valid Ed25519 signature.
 
 **Commit**: `Day 1 deployment: telnyx.toml with real IDs, KV seeded, smoke scripts, DEVLOG entry`
+
+## 2026-11-13 — build: remove secret-question MFA and fix session-token conversation binding
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: None (platform features unchanged; only code edits)
+- **What was built**:
+  1. Removed `answer_secret_question` tool from MCP server (`src/tools.ts`):
+     - Deleted `handleAnswerSecretQuestion` function.
+     - Removed tool registration and Zod schema.
+     - Removed imports of `createVerificationToken`, `verifyVerificationToken`, and `answerHash`.
+  2. Simplified `verify_employee` to issue `auth_token` immediately after PIN verification, bypassing the secret-question branch entirely. Description updated to match.
+  3. Removed `answer_secret_question` from `nodeForTool` and `needs_secret_question` from `outcomeFromMcpResponse` and `isToolOutcome` in `src/mcp.ts`.
+  4. Removed `needs_secret_question` from `LogOutcome` type in `src/lib/log.ts`.
+  5. Updated `tests/tools-secret.test.ts`:
+     - Changed the secret-question test to expect `auth_token` directly.
+     - Removed all 5 `handleAnswerSecretQuestion` tests.
+     - Removed unused imports.
+  6. **Critical bug fix**: `resolveEmployeeFromToken` in all employee-scoped tools (`get_leave_balance`, `preview_leave`, `apply_leave`, `cancel_leave`) was called with `undefined` for `conversationId`, causing token verification to use `bind: "none"`. Since `verify_employee` and `answer_secret_question` (now removed) created tokens with the actual `conversationId`, the signature mismatch caused `unauthenticated` on every subsequent tool call. Fixed by passing the closure `conversationId` through to all four tool handlers.
+  7. `npm run typecheck` passes; `npm test` passes (56 tests across 9 files).
+  8. `telnyx-edge ship` → deployed in 4m10s.
+  9. Smoke test passed: `tools/list` returns 7 tools (`answer_secret_question` absent).
+  10. Verified end-to-end flow:
+      - `verify_employee(1001, 1111)` → `auth_token` + "Welcome, Alex." (outcome: `verified`)
+      - `get_leave_balance(auth_token)` → "You have 8 days remaining out of 14 days annual leave." (outcome: `ok`)
+      - Token conversation binding works correctly across both calls.
+- **What went wrong / open items**: The conversation-binding bug was latent until the token-creation fix from the prior session exposed it. It never showed in unit tests because mocks don\'t verify HMAC signatures.
+
+**Commits**:
+- `fix: remove secret-question MFA, fix token conversation binding in all tools`
+
+
+## 2026-11-14 — fix #34: token handoff (Claude-authored, disclosed exception)
+
+- **Provenance**: Claude Code (Sonnet 5.5, `claude-sonnet-5-5`) wrote this code at David's explicit request, against the project rule that OpenCode writes all solution code. Disclosed exception; needs reviewer attention accordingly.
+- **Change**: `toolSuccess` and `toolError` in `hr-leave-assistant/src/tools.ts` now serialize the full envelope (`{ ok, data, message }` / `{ ok, code, message }`) into the text block as well as `structuredContent`, so a text-only consumer sees `data.auth_token`. Tool descriptions say `auth_token` is the exact `data.auth_token` from `verify_employee`. Signature, expiry and conversation-binding checks are untouched.
+- **Tests**: `tests/token-handoff.test.ts` drives the real MCP server through the SDK in-memory transport: token read from text completes the balance lookup; employee number, greeting and PIN as token are rejected without reaching `summary`; a token from another conversation is rejected. 5 of 6 fail without the fix. `npm run typecheck` clean, `npm test` 62 passed.
+- **Not verified**: no deploy, no voice call. Acceptance (`verify_employee` verified then `get_leave_balance` ok on one conversation, no token spoken or logged) is still open.
+- **Portal step, not in this PR**: append to the `Verify_employee` node instructions: "After `verify_employee` succeeds, read `data.auth_token` from its JSON result. Pass that exact string unchanged as `auth_token` to `get_leave_balance` immediately. Never substitute the welcome greeting, the full response object, an employee number or PIN. Never invent, shorten or speak the token. If the result has no token, treat it as a tool failure and use the existing fallback. Read the remaining days only after `get_leave_balance` succeeds. If balance returns `unauthenticated`, verify once more; after another failure use the HR fallback."
+- **Fallback if exact-copy is still unreliable**: conversation-keyed actor session (TDD 7.1 / C-7), separate issue.
