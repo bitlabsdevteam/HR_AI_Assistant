@@ -182,17 +182,23 @@ export async function exportSpan(
 export async function loadLangfuseCredentials(env: {
   SECRETS: { get(name: string): Promise<string | undefined> };
 }): Promise<LangfuseCredentials | undefined> {
-  const [publicKey, secretKey, host] = await Promise.all([
-    env.SECRETS.get("LANGFUSE_PUBLIC_KEY"),
-    env.SECRETS.get("LANGFUSE_SECRET_KEY"),
-    env.SECRETS.get("LANGFUSE_HOST"),
-  ]);
+  try {
+    const [publicKey, secretKey, host] = await Promise.all([
+      env.SECRETS.get("LANGFUSE_PUBLIC_KEY"),
+      env.SECRETS.get("LANGFUSE_SECRET_KEY"),
+      env.SECRETS.get("LANGFUSE_HOST"),
+    ]);
 
-  if (!publicKey || !secretKey || !host) {
+    if (!publicKey || !secretKey || !host) {
+      return undefined;
+    }
+
+    return { publicKey, secretKey, host };
+  } catch {
+    // Secrets binding may throw (e.g. HTTP 404) when a secret is not configured.
+    // Treat this as "tracing off" rather than failing the request.
     return undefined;
   }
-
-  return { publicKey, secretKey, host };
 }
 
 /**

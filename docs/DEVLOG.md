@@ -67,6 +67,44 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 
 **Commit**: `Day 1: actor scaffold, webhook, CallerProfile, KV read, seven MCP tools, admin/ops routes`
 
+## 2026-11-13 — build: ticket #20 (secret-question MFA)
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: `Telynyx/index.md`, `Telynyx/wiki/entities/edge-functions.md`
+- **What was built**:
+  1. Added `answerHash` helper to `src/lib/identity.ts` (HMAC-SHA-256 of normalised answer).
+  2. Updated admin `/reset` in `src/index.ts` to seed `secretQuestion` and `secretAnswerHash` from `DEFAULT_EMPLOYEES` into actors.
+  3. Modified `verify_employee` tool in `src/tools.ts` to branch to secret-question MFA when employee has one configured: returns `needs_secret_question`, `question`, and `verification_token`.
+  4. Added new `answer_secret_question` MCP tool: validates verification token (conversation-bound, 2-minute expiry), hashes answer, delegates to `EmployeeLeave.verifySecretAnswer`, issues `auth_token` on success or `auth_failed`/`locked` on failure.
+  5. Updated `nodeForTool` in `src/mcp.ts` to map `answer_secret_question` to `N10`.
+  6. Added `needs_secret_question` to `LogOutcome` in `src/lib/log.ts` and `outcomeFromMcpResponse`.
+  7. Threaded `conversationId` from MCP request metadata into `createHrLeaveMcpServer`.
+  8. Extracted `handleVerifyEmployee` and `handleAnswerSecretQuestion` into exported async functions for testability.
+  9. Added `tests/tools-secret.test.ts` with 9 tests: happy path both branches, wrong PIN, locked account, correct/wrong secret answer, 3-strike lockout, expired token, wrong conversation ID.
+  10. `npm run typecheck` passes; `npm test` passes (61 tests across 9 files).
+  11. Deployed to Telnyx Edge: `telnyx-edge ship` → build succeeded after initial timeout; `telnyx-edge ship status hr-leave-assistant` confirmed success.
+  12. Smoke test passed: health check, MCP 401 without bearer, admin/ops 401 without bearer, MCP `tools/list` with bearer (8 tools present including `answer_secret_question`), MCP `get_leave_policy` with bearer, admin reset with bearer, admin requests with bearer.
+- **Code review**: Standards found 1 violation (verify_employee description outdated) and 1 smell (duplicated locked/failed/token logic in handlers); fixed description in follow-up commit.
+- **What went wrong / open items**: None.
+
+**Commits**:
+- `9313be5 feat(#20): verify_employee branches to secret question; answer_secret_question tool`
+- `e9304fc fix(#20): update verify_employee tool description for secret-question branch`
+
+## 2026-11-13 — build: re-ship with bucket config fix and Langfuse secret guard
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: `Telynyx/index.md`, `Telynyx/wiki/telnyx-build-reading-list.md`, `Telynyx/wiki/telnyx-gotchas-all.md`, `Telynyx/wiki/entities/edge-functions.md`, `Telynyx/wiki/telnyx/edge-compute/edge-compute-cli-reference.md`
+- **What was built**:
+  1. Fixed `telnyx.toml` Cloud Storage bucket name (`hr-policy` vs old `hr-leave-assistant-policy`) and region (`us-central-1` vs old `us-east-1`) to match created infrastructure.
+  2. Hardened `loadLangfuseCredentials` in `src/lib/langfuse.ts` with a `try/catch` so a missing secret binding throws no error into the request; tracing falls back to `"off"`.
+  3. `npm run typecheck` passes; `npm test` passes (61 tests across 9 files).
+  4. `telnyx-edge ship` → deployed in 4m1s. Smoke test passed: health check, MCP 401 without bearer, admin/ops 401 without bearer, MCP `tools/list` with bearer (8 tools present), MCP `get_leave_policy` with bearer, admin reset with bearer, admin requests with bearer.
+  5. `telnyx-edge logs hr-leave-assistant --since 5m` shows expected `tool.completed` log lines with `outcome: "ok"` and `trace: "off"`.
+- **What went wrong / open items**: None.
+
+**Commit**: `fix: bucket name/region in telnyx.toml and guard Langfuse secret load`
+
 ## 2026-11-12 — build: added TELNYX_PUBLIC_KEY and re-shipped
 
 - Added `HRLEAVE_TELNYX_PUBLIC_KEY` secret with the provided Ed25519 public key.
