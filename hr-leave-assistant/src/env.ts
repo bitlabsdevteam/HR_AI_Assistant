@@ -10,7 +10,8 @@ export type SecretBindingName =
   | "TELNYX_PUBLIC_KEY"
   | "LANGFUSE_PUBLIC_KEY"
   | "LANGFUSE_SECRET_KEY"
-  | "LANGFUSE_HOST";
+  | "LANGFUSE_HOST"
+  | "TELNYX_API_KEY";
 
 /** Interface for reading secrets from the runtime secrets binding. */
 export interface SecretsBinding {
