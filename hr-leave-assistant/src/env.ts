@@ -49,6 +49,8 @@ export type CallerProfileStub = Pick<CallerProfile, "recordCall" | "ping">;
 export type EmployeeLeaveStub = Pick<
   EmployeeLeave,
   | "verifyPin"
+  | "verifySecretAnswer"
+  | "setSecretQuestion"
   | "summary"
   | "check"
   | "apply"
