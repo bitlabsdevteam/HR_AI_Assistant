@@ -122,6 +122,23 @@ export async function pinHash(
 }
 
 /**
+ * Computes the stored hash of a secret-question answer.
+ * The plain answer is normalised (trimmed, lowercased) before hashing.
+ *
+ * @param hashKey - The secret HMAC key.
+ * @param employeeNumber - The employee's number.
+ * @param answer - The plain-text answer.
+ * @returns The HMAC hex string of the answer.
+ */
+export async function answerHash(
+  hashKey: string,
+  employeeNumber: string,
+  answer: string,
+): Promise<string> {
+  return hmacSha256Hex(hashKey, `ans|${employeeNumber}|${answer.trim().toLowerCase()}`);
+}
+
+/**
  * Generates a deterministic key for a leave request based on employee number and date range.
  * Used for idempotency: replaying the same request yields the same key.
  *
