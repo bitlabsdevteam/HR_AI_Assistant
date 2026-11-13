@@ -31,6 +31,7 @@ export interface LeaveRequestRecord {
   start: string;
   end: string;
   days: number;
+  reason: string;
   status: "approved" | "cancelled";
   createdAt: string;
   cancelledAt: string | null;
@@ -312,6 +313,7 @@ export class EmployeeLeave extends StatefulActor {
     start: string;
     end: string;
     days: number;
+    reason: string;
     requestKey: string;
     callRef: string | null;
     nowIso: string;
@@ -323,6 +325,9 @@ export class EmployeeLeave extends StatefulActor {
     if (
       !Number.isInteger(input.days) ||
       input.days < 1 ||
+      typeof input.reason !== "string" ||
+      input.reason.length === 0 ||
+      input.reason.length > 200 ||
       !/^[0-9a-f]{64}$/.test(input.requestKey) ||
       !Number.isFinite(Date.parse(input.nowIso))
     ) {
@@ -373,6 +378,7 @@ export class EmployeeLeave extends StatefulActor {
       start: input.start,
       end: input.end,
       days: input.days,
+      reason: input.reason,
       status: "approved",
       createdAt: input.nowIso,
       cancelledAt: null,
