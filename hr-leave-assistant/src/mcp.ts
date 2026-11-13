@@ -3,6 +3,7 @@ import type { AppEnv } from "./env";
 import { hasValidBearer } from "./lib/auth";
 import { errorResponse, HttpRequestError, jsonResponse, readRawBody } from "./lib/http";
 import { writeCompletionLog, type CompletionLog, type LogOutcome } from "./lib/log";
+import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 import { createHrLeaveMcpServer, type McpObservation } from "./tools";
 
 /** Metadata extracted from an incoming MCP request for logging and routing. */
@@ -77,17 +78,39 @@ export async function handleMcp(request: Request, env: AppEnv): Promise<Response
       500,
     );
   } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: metadata.toolName,
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        call_ref: observation.call_ref ?? "none",
+        conversation_id: metadata.conversationId,
+        tool: metadata.methodName === "tools/call" ? metadata.toolName : metadata.methodName,
+        node: metadata.methodName === "tools/call" ? nodeForTool(metadata.toolName) : "discovery",
+        outcome,
+        duration_ms: durationMs,
+        actor_ms: observation.actor_ms,
+        emp: observation.emp,
+        kv: observation.kv,
+      },
+    });
     writeCompletionLog({
       event: "tool.completed",
-      call_ref: "none",
+      call_ref: observation.call_ref ?? "none",
       conversation_id: metadata.conversationId,
       node: metadata.methodName === "tools/call" ? nodeForTool(metadata.toolName) : "discovery",
       tool: metadata.methodName === "tools/call" ? metadata.toolName : metadata.methodName,
       outcome,
       status,
-      duration_ms: Date.now() - startedAt,
+      duration_ms: durationMs,
+      actor_ms: observation.actor_ms,
+      emp: observation.emp,
       kv: observation.kv,
       detail: metadata.detail,
+      trace,
     });
   }
 }
@@ -154,19 +177,61 @@ async function outcomeFromMcpResponse(response: Response): Promise<LogOutcome> {
   }
 
   const result = asRecord(envelope?.result);
-  if (result?.isError === true) {
-    const structured = asRecord(result.structuredContent);
+  const structured = asRecord(result?.structuredContent);
+
+  if (structured?.ok === false) {
     const code = structured?.code;
     return code === "invalid_input" ||
       code === "unauthenticated" ||
+      code === "auth_failed" ||
+      code === "locked" ||
       code === "out_of_policy" ||
+      code === "insufficient_balance" ||
+      code === "overlap" ||
       code === "changes_paused" ||
       code === "not_found"
       ? code
       : "error";
   }
 
+  if (structured?.ok === true) {
+    const data = asRecord(structured?.data);
+    if (typeof data?.status === "string" && isToolOutcome(data.status)) {
+      return data.status as LogOutcome;
+    }
+    if (typeof data?.auth_token === "string") {
+      return "verified";
+    }
+  }
+
   return "ok";
+}
+
+/**
+ * Checks whether a string is a known tool-level outcome.
+ */
+function isToolOutcome(value: string): value is LogOutcome {
+  return [
+    "ready",
+    "degraded",
+    "ok",
+    "verified",
+    "auth_failed",
+    "locked",
+    "approved",
+    "cancelled",
+    "replayed",
+    "insufficient_balance",
+    "overlap",
+    "out_of_policy",
+    "not_found",
+    "changes_paused",
+    "queued",
+    "invalid_input",
+    "unauthenticated",
+    "unauthorized",
+    "error",
+  ].includes(value);
 }
 
 /**

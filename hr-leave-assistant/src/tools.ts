@@ -59,6 +59,9 @@ const requestHrCallbackInputSchema = z.object({
 /** Observation object shared between the MCP handler and tool implementations. */
 export interface McpObservation {
   kv?: "hit" | "fallback";
+  emp?: string;
+  actor_ms?: number;
+  call_ref?: string;
 }
 
 /** Builds a success tool result with structured content. */
@@ -76,6 +79,21 @@ function toolError(code: string, message: string): CallToolResult {
     structuredContent: { ok: false as const, code, message },
     isError: true,
   };
+}
+
+/**
+ * Wraps an actor call so its wall-clock time is added to observation.actor_ms.
+ */
+async function withActorTiming<T>(
+  observation: McpObservation,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const start = Date.now();
+  try {
+    return await fn();
+  } finally {
+    observation.actor_ms = (observation.actor_ms ?? 0) + (Date.now() - start);
+  }
 }
 
 /**
@@ -101,6 +119,7 @@ async function resolveEmployeeFromToken(
   }
 
   const empPseudonym = await employeePseudonym(hashKey, employeeNumber);
+  observation.emp = empPseudonym;
   return { employeeNumber, empPseudonym };
 }
 
@@ -155,6 +174,8 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
         return toolError("unavailable", "Sign-in is unavailable right now. Please ask for an HR callback.");
       }
 
+      observation.emp = await employeePseudonym(hashKey, employee_number);
+
       const employee = DEFAULT_EMPLOYEES.find((e) => e.employeeNumber === employee_number);
       const suppliedPinHash = await pinHash(hashKey, employee_number, pin);
       const nowIso = new Date().toISOString();
@@ -162,7 +183,9 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
       if (!employee) {
         // Unknown number: hand off to HrDesk for indistinguishable lockout behavior.
         const empHash = await employeeActorName(hashKey, employee_number);
-        const result = await env.HR_DESK.idFromName("cedar").failUnknown(empHash, nowIso);
+        const result = await withActorTiming(observation, () =>
+          env.HR_DESK.idFromName("cedar").failUnknown(empHash, nowIso),
+        );
         if (result.status === "locked") {
           return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
         }
@@ -170,7 +193,9 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
       }
 
       const actorName = await employeeActorName(hashKey, employee_number);
-      const result = await env.EMPLOYEE_LEAVE.idFromName(actorName).verifyPin(suppliedPinHash, nowIso);
+      const result = await withActorTiming(observation, () =>
+        env.EMPLOYEE_LEAVE.idFromName(actorName).verifyPin(suppliedPinHash, nowIso),
+      );
 
       if (result.status === "locked") {
         return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
@@ -218,7 +243,9 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
       const { profile } = await loadCompanyProfile(env);
       const todayIso = todayIsoInTimeZone(now, profile.timezone);
       const actorName = await employeeActorName(hashKey, employeeNumber);
-      const summary = await env.EMPLOYEE_LEAVE.idFromName(actorName).summary(todayIso);
+      const summary = await withActorTiming(observation, () =>
+        env.EMPLOYEE_LEAVE.idFromName(actorName).summary(todayIso),
+      );
 
       const upcomingText = summary.upcoming.length > 0
         ? ` Upcoming approved leave: ${summary.upcoming.map((u) => `${spokenIsoDate(u.start)} to ${spokenIsoDate(u.end)}, ${u.days} working days`).join("; ")}.`
@@ -278,11 +305,13 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
       }
 
       const actorName = await employeeActorName(hashKey, employeeNumber);
-      const actorCheck = await env.EMPLOYEE_LEAVE.idFromName(actorName).check({
-        start: start_date,
-        end: end_date,
-        days: validation.workingDays,
-      });
+      const actorCheck = await withActorTiming(observation, () =>
+        env.EMPLOYEE_LEAVE.idFromName(actorName).check({
+          start: start_date,
+          end: end_date,
+          days: validation.workingDays,
+        }),
+      );
 
       if (!actorCheck.ok) {
         return toolError(
@@ -317,6 +346,8 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
         return toolError("unauthenticated", "Please sign in first with your employee number and PIN.");
       }
 
+      observation.call_ref = call_ref ?? undefined;
+
       const { employeeNumber } = resolved;
       const { profile, leaveChangesEnabled, kv } = await loadCompanyContext(env);
       observation.kv = kv;
@@ -346,14 +377,16 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
 
       const requestKey = await leaveRequestKey(employeeNumber, start_date, end_date);
       const actorName = await employeeActorName(hashKey, employeeNumber);
-      const result = await env.EMPLOYEE_LEAVE.idFromName(actorName).apply({
-        start: start_date,
-        end: end_date,
-        days: validation.workingDays,
-        requestKey,
-        callRef: call_ref ?? null,
-        nowIso: now.toISOString(),
-      });
+      const result = await withActorTiming(observation, () =>
+        env.EMPLOYEE_LEAVE.idFromName(actorName).apply({
+          start: start_date,
+          end: end_date,
+          days: validation.workingDays,
+          requestKey,
+          callRef: call_ref ?? null,
+          nowIso: now.toISOString(),
+        }),
+      );
 
       if (result.status === "insufficient_balance") {
         return toolError(
@@ -393,6 +426,8 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
         return toolError("unauthenticated", "Please sign in first with your employee number and PIN.");
       }
 
+      observation.call_ref = call_ref ?? undefined;
+
       const { employeeNumber } = resolved;
       const { profile, leaveChangesEnabled, kv } = await loadCompanyContext(env);
       observation.kv = kv;
@@ -409,11 +444,13 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
       }
 
       const actorName = await employeeActorName(hashKey, employeeNumber);
-      const result = await env.EMPLOYEE_LEAVE.idFromName(actorName).cancel({
-        startDate: start_date,
-        todayIso,
-        nowIso: now.toISOString(),
-      });
+      const result = await withActorTiming(observation, () =>
+        env.EMPLOYEE_LEAVE.idFromName(actorName).cancel({
+          startDate: start_date,
+          todayIso,
+          nowIso: now.toISOString(),
+        }),
+      );
 
       if (result.status === "not_found") {
         return toolError("not_found", "I couldn't find approved leave starting on that date.");
@@ -445,20 +482,24 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation)
       inputSchema: requestHrCallbackInputSchema,
     },
     async ({ caller_name, callback_number, reason, note, call_ref }): Promise<CallToolResult> => {
+      observation.call_ref = call_ref ?? undefined;
+
       const { profile } = await loadCompanyProfile(env);
       const now = new Date();
       const todayIso = todayIsoInTimeZone(now, profile.timezone);
       const callbackKey = await callbackRequestKey(callback_number, reason, todayIso);
 
-      const result = await env.HR_DESK.idFromName("cedar").addCallback({
-        name: caller_name,
-        phone: callback_number,
-        reason,
-        note: note ?? null,
-        callRef: call_ref ?? null,
-        callbackKey,
-        nowIso: now.toISOString(),
-      });
+      const result = await withActorTiming(observation, () =>
+        env.HR_DESK.idFromName("cedar").addCallback({
+          name: caller_name,
+          phone: callback_number,
+          reason,
+          note: note ?? null,
+          callRef: call_ref ?? null,
+          callbackKey,
+          nowIso: now.toISOString(),
+        }),
+      );
 
       const replayText = result.replayed ? " That request was already queued." : "";
       return toolSuccess(
