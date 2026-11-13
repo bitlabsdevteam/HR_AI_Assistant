@@ -5,6 +5,8 @@ export interface DemoEmployee {
   entitlementDays: number;
   openingUsedDays: number;
   pin: string;
+  secretQuestion: string | null;
+  secretAnswer: string | null;
 }
 
 // Entirely synthetic demo data. Never put production credentials in this file.
@@ -15,6 +17,8 @@ export const DEFAULT_EMPLOYEES: readonly DemoEmployee[] = [
     entitlementDays: 14,
     openingUsedDays: 6,
     pin: "1111",
+    secretQuestion: "What is your favourite colour?",
+    secretAnswer: "Blue",
   },
   {
     employeeNumber: "1002",
@@ -22,6 +26,8 @@ export const DEFAULT_EMPLOYEES: readonly DemoEmployee[] = [
     entitlementDays: 14,
     openingUsedDays: 12,
     pin: "2222",
+    secretQuestion: "What city were you born in?",
+    secretAnswer: "Mumbai",
   },
   {
     employeeNumber: "1003",
@@ -29,6 +35,8 @@ export const DEFAULT_EMPLOYEES: readonly DemoEmployee[] = [
     entitlementDays: 14,
     openingUsedDays: 9,
     pin: "3333",
+    secretQuestion: "What was the name of your first pet?",
+    secretAnswer: "Buddy",
   },
   {
     employeeNumber: "1004",
@@ -36,5 +44,7 @@ export const DEFAULT_EMPLOYEES: readonly DemoEmployee[] = [
     entitlementDays: 14,
     openingUsedDays: 0,
     pin: "4444",
+    secretQuestion: "What is your mother's maiden name?",
+    secretAnswer: "Johnson",
   },
 ];

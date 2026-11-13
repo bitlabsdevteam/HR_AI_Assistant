@@ -9,6 +9,8 @@ export interface EmployeeProfile {
   entitlementDays: number;
   openingUsedDays: number;
   pinHash: string;
+  secretQuestion: string | null;
+  secretAnswerHash: string | null;
   failedAttempts: number;
   lockedUntil: string | null;
 }
@@ -19,6 +21,8 @@ export interface EmployeeResetSeed {
   entitlementDays: number;
   openingUsedDays: number;
   pinHash: string;
+  secretQuestion?: string | null;
+  secretAnswerHash?: string | null;
 }
 
 /** A single leave request record stored in the actor's durable state. */
@@ -139,6 +143,103 @@ export class EmployeeLeave extends StatefulActor {
       this.ctx.storage.put("counters", counters),
     ]);
     return { status: "failed", attemptsLeft };
+  }
+
+  /**
+   * Verifies a secret-answer hash against the stored hash for this employee.
+   * Shares the same failed-attempt counter and 15-minute lockout as verifyPin.
+   *
+   * @param suppliedAnswerHash - The HMAC-SHA-256 of the normalised answer.
+   * @param nowIso - Current time as an ISO-8601 string.
+   * @returns Result indicating success, failure with attempts remaining, or locked status.
+   */
+  async verifySecretAnswer(
+    suppliedAnswerHash: string,
+    nowIso: string,
+  ): Promise<
+    | { status: "ok"; firstName: string }
+    | { status: "failed"; attemptsLeft: number }
+    | { status: "locked"; minutesLeft: number }
+  > {
+    const nowMilliseconds = Date.parse(nowIso);
+    if (!Number.isFinite(nowMilliseconds) || !/^[0-9a-f]{64}$/.test(suppliedAnswerHash)) {
+      throw new Error("Invalid secret answer verification input");
+    }
+
+    const profile = await this._requiredProfile();
+    const counters = await this._counters();
+
+    if (!profile.secretQuestion || !profile.secretAnswerHash) {
+      // No secret question configured: behave as if verified.
+      counters.verified += 1;
+      await this.ctx.storage.put("counters", counters);
+      return { status: "ok", firstName: profile.firstName };
+    }
+
+    const lockedUntilMilliseconds = profile.lockedUntil ? Date.parse(profile.lockedUntil) : Number.NaN;
+    if (Number.isFinite(lockedUntilMilliseconds) && lockedUntilMilliseconds > nowMilliseconds) {
+      return {
+        status: "locked",
+        minutesLeft: Math.max(1, Math.ceil((lockedUntilMilliseconds - nowMilliseconds) / 60_000)),
+      };
+    }
+
+    // Expired lock: reset counts.
+    if (profile.lockedUntil) {
+      profile.lockedUntil = null;
+      profile.failedAttempts = 0;
+    }
+
+    if (constantTimeEqual(profile.secretAnswerHash, suppliedAnswerHash)) {
+      profile.failedAttempts = 0;
+      profile.lockedUntil = null;
+      counters.verified += 1;
+      await Promise.all([
+        this.ctx.storage.put("profile", profile),
+        this.ctx.storage.put("counters", counters),
+      ]);
+      return { status: "ok", firstName: profile.firstName };
+    }
+
+    profile.failedAttempts += 1;
+    counters.authFailures += 1;
+
+    if (profile.failedAttempts >= 3) {
+      profile.failedAttempts = 0;
+      profile.lockedUntil = new Date(nowMilliseconds + 15 * 60_000).toISOString();
+      counters.lockouts += 1;
+      await Promise.all([
+        this.ctx.storage.put("profile", profile),
+        this.ctx.storage.put("counters", counters),
+      ]);
+      return { status: "locked", minutesLeft: 15 };
+    }
+
+    const attemptsLeft = 3 - profile.failedAttempts;
+    await Promise.all([
+      this.ctx.storage.put("profile", profile),
+      this.ctx.storage.put("counters", counters),
+    ]);
+    return { status: "failed", attemptsLeft };
+  }
+
+  /**
+   * Sets or migrates the secret question and answer hash for this employee.
+   * Only writes if the fields are currently missing (lazy migration).
+   *
+   * @param question - The human-readable secret question.
+   * @param answerHash - The HMAC-SHA-256 of the normalised answer.
+   * @returns "ok" when written, "skipped" when already present.
+   */
+  async setSecretQuestion(question: string, answerHash: string): Promise<"ok" | "skipped"> {
+    const profile = await this._requiredProfile();
+    if (profile.secretQuestion && profile.secretAnswerHash) {
+      return "skipped";
+    }
+    profile.secretQuestion = question;
+    profile.secretAnswerHash = answerHash;
+    await this.ctx.storage.put("profile", profile);
+    return "ok";
   }
 
   /**
@@ -400,6 +501,8 @@ export class EmployeeLeave extends StatefulActor {
       entitlementDays: seed.entitlementDays,
       openingUsedDays: seed.openingUsedDays,
       pinHash: seed.pinHash,
+      secretQuestion: seed.secretQuestion ?? null,
+      secretAnswerHash: seed.secretAnswerHash ?? null,
       failedAttempts: 0,
       lockedUntil: null,
     };
