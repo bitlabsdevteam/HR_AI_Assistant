@@ -153,6 +153,23 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - **Portal step, not in this PR**: append to the `Verify_employee` node instructions: "After `verify_employee` succeeds, read `data.auth_token` from its JSON result. Pass that exact string unchanged as `auth_token` to `get_leave_balance` immediately. Never substitute the welcome greeting, the full response object, an employee number or PIN. Never invent, shorten or speak the token. If the result has no token, treat it as a tool failure and use the existing fallback. Read the remaining days only after `get_leave_balance` succeeds. If balance returns `unauthenticated`, verify once more; after another failure use the HR fallback."
 - **Fallback if exact-copy is still unreliable**: conversation-keyed actor session (TDD 7.1 / C-7), separate issue.
 
+## 2026-11-14 — build: ticket #46 (router catch log gap)
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: None for this slice (no platform features used; pure function fix).
+- **What was built**:
+  1. Added `"router.completed"` to the `event` union in `src/lib/log.ts`.
+  2. Added `startedAt = Date.now()` before the router `try` in `src/index.ts` and a `writeCompletionLog` call in the router `catch`, producing one completion line with `outcome: "error"`, `status: 500`, `call_ref: "none"`, `duration_ms`. The raw error object is not logged; the 500 response body is unchanged.
+  3. Added test in `tests/log.test.ts` that spies on `req.method` getter to force a synchronous throw inside the router (before any handler) and asserts exactly one JSON log line with the required fields. Also asserts the error message does not leak into the log.
+  4. `npm run typecheck` passes; `npm test` passes (82 tests across 11 files).
+  5. Committed on branch `docs/diagnostics-2026-11-14`.
+- **Code review** (self-triggered after commit):
+  - **Standards**: 1 hard violation raised — the invariant "One log line per request, written in `finally`" is breached because the router log is in `catch`; accepted as a necessary special case because a router-level `finally` would double-log every successful handler request.
+  - **Spec**: 1 scope creep (`level: "error"` not requested) — removed within the same commit before final report; 1 test naming issue — renamed to "writes exactly one JSON log line when a synchronous throw occurs in the router before any handler runs".
+- **What went wrong / open items**: None.
+
+**Commit**: `85e7555 Add completion log to router catch block (#46)`
+
 ## 2026-11-14 — diagnosis: verification-to-balance token handoff
 
 - **Investigator/model**: Codex (GPT-6; a more specific runtime model identifier is not exposed). Research and local diagnostics only; no solution-code authorship or Telnyx-hosted-model provenance is claimed for this entry.
