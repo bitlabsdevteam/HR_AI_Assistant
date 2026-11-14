@@ -17,6 +17,7 @@ export { HrDesk } from "./actors/hr-desk";
 export default {
   async fetch(request: Request, env: AppEnv): Promise<Response> {
     const path = new URL(request.url).pathname;
+    const startedAt = Date.now();
 
     try {
       if (path === "/health/liveness" || path === "/health/readiness") {
@@ -59,6 +60,14 @@ export default {
 
       return errorResponse(new HttpRequestError(404, "not_found"));
     } catch {
+      const durationMs = Date.now() - startedAt;
+      writeCompletionLog({
+        event: "router.completed",
+        call_ref: "none",
+        outcome: "error",
+        status: 500,
+        duration_ms: durationMs,
+      });
       return jsonResponse(
         { error: { code: "unavailable", message: "The service is unavailable." } },
         500,

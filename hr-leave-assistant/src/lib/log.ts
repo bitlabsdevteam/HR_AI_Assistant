@@ -30,7 +30,7 @@ export type LogOutcome =
  */
 export interface CompletionLog {
   /** The type of event that completed. */
-  event: "webhook.completed" | "tool.completed" | "admin.completed" | "ops.completed";
+  event: "webhook.completed" | "tool.completed" | "admin.completed" | "ops.completed" | "router.completed";
   /** Unique reference for this call (or "none" for non-call contexts). */
   call_ref: string;
   /** High-level outcome of the request. */
