@@ -232,3 +232,9 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - **What went wrong / open items**: None.
 
 **Commit**: `feat: logging gaps #41 #42 #43 — policy error detail, ops failed deps, actor events`
+
+## 2026-11-14 — review: get_leave_policy bucket path
+
+- **Reviewed**: d50ec12 (bucket read added in cd78348, #27). `npm run typecheck` and `npm test` pass (106 tests).
+- **Findings raised**: (1) bucket is a second source of truth for policy text while leave rules still read KV, so spoken policy can contradict enforcement; (2) Cloud Storage not in TDD §3.1 or the §6 tool row; (3) no test or smoke check covers the bucket-success path or asserts `source`; (4) `observation.kv` is set to "hit" when the answer came from the bucket; (5) serial KV then bucket reads with no deadline; (6) no DEVLOG entry for #27 naming the model ID or deployed evidence. Not RAG: a fixed-topic JSON lookup.
+- **Fixed**: none yet.
