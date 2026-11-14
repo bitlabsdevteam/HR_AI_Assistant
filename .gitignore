@@ -5,3 +5,4 @@
 .opencode/tui.json
 /docs/archive/
 /docs/motion-docs.db
+node_modules/

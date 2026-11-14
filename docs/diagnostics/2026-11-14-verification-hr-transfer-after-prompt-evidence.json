@@ -1,0 +1,71 @@
+{
+  "conversation_id": "acda819a-4457-45f9-adfd-3a11ac0a946d",
+  "created_at": "2026-11-13T22:49:45.825317Z",
+  "version_id": "20261113T224936243181",
+  "flow_transitions": [
+    {
+      "timestamp": "2026-11-13T22:49:57Z",
+      "from": "ai_receptionist",
+      "to": "verify_employee",
+      "kind": "llm",
+      "edge": "ai_receptionist_to_verify_employee"
+    },
+    {
+      "timestamp": "2026-11-13T22:50:17Z",
+      "from": "verify_employee",
+      "to": "hr_manager",
+      "kind": "llm",
+      "edge": "verify_employee_to_hr_manager"
+    }
+  ],
+  "expected_manager_node": "hr_manager",
+  "events": [
+    {
+      "index": 6,
+      "timestamp": "2026-11-13T22:50:13.655871Z",
+      "kind": "tool_call",
+      "tool": "verify_employee",
+      "node_from_flow_metadata": "verify_employee"
+    },
+    {
+      "index": 7,
+      "timestamp": "2026-11-13T22:50:16.802730Z",
+      "kind": "tool_result",
+      "tool": "verify_employee",
+      "explicit_ok_true": true,
+      "has_token_field": true
+    },
+    {
+      "index": 8,
+      "timestamp": "2026-11-13T22:50:18.319521Z",
+      "kind": "tool_call",
+      "tool": "transfer",
+      "node_from_flow_metadata": "hr_manager"
+    },
+    {
+      "index": 11,
+      "timestamp": "2026-11-13T22:50:23.171182Z",
+      "kind": "tool_call",
+      "tool": "transfer",
+      "node_from_flow_metadata": "hr_manager"
+    }
+  ],
+  "assistant_id": "assistant-00b60205-732a-4cf3-b3c8-78871df94fec",
+  "model": "zai-org/GLM-5.3-Flash",
+  "mcp_servers": [
+    {
+      "id": "01f53071-2e30-4a0c-b90d-4345bc2289ec",
+      "allowed_tools": null,
+      "server_allowed_tools": null
+    }
+  ],
+  "comparison_to_version": "20261113T224228900441",
+  "changed_node_ids": [
+    "hr_manager"
+  ],
+  "edges_unchanged": true,
+  "mcp_settings_unchanged": true,
+  "global_instructions_unchanged": true,
+  "hr_prompt": "The caller is a verified employee who needs HR.\nDo not answer questions about leave, balances, or policies yourself. HR will help them.\nSay one short line, such as \"Sure, I'll connect you to HR now.\" Then immediately call the transfer tool using only the target named \"HR Manager\".\nIf the transfer fails, is declined, or reaches voicemail, say the HR team is not available right now and ask the caller to try again later.\nIf the caller says this is the wrong team, go back to the receptionist step.",
+  "note": "Corrected tool selection observed in one existing call after saved HR prompt changed. This does not establish successful connection to a person. No application change or new call was performed by this investigation. No caller speech, tool bodies, or credentials retained."
+}
