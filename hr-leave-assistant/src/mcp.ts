@@ -113,7 +113,8 @@ export async function handleMcp(request: Request, env: AppEnv): Promise<Response
       actor_ms: observation.actor_ms,
       emp: observation.emp,
       kv: observation.kv,
-      detail: metadata.detail,
+      detail: metadata.detail ?? observation.detail,
+      actor_event: observation.actor_event,
       trace,
     });
   }

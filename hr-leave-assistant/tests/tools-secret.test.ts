@@ -143,6 +143,7 @@ describe("handleVerifyEmployee", () => {
         first_name: "Test",
       },
     });
+    expect(observation.actor_event).toBe("pin_verified");
   });
 
   it("returns auth_token when PIN is correct even if employee has a secret question", async () => {
@@ -161,6 +162,7 @@ describe("handleVerifyEmployee", () => {
         first_name: "Alex",
       },
     });
+    expect(observation.actor_event).toBe("pin_verified");
   });
 
   it("returns auth_failed on wrong PIN", async () => {
@@ -179,6 +181,7 @@ describe("handleVerifyEmployee", () => {
       ok: false,
       code: "auth_failed",
     });
+    expect(observation.actor_event).toBe("pin_failed");
   });
 
   it("returns locked when account is locked", async () => {
@@ -197,5 +200,25 @@ describe("handleVerifyEmployee", () => {
       ok: false,
       code: "locked",
     });
+    expect(observation.actor_event).toBe("pin_locked");
+  });
+
+  it("records actor_event for unknown employee failure", async () => {
+    const env = await createMockEnv({
+      hrDesk: {
+        failUnknown: async () => ({ status: "failed" as const, attemptsLeft: 2 }),
+      },
+    });
+    const observation: Record<string, unknown> = {};
+    const result = await handleVerifyEmployee(env, observation, undefined, {
+      employee_number: "0000",
+      pin: "1234",
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      ok: false,
+      code: "auth_failed",
+    });
+    expect(observation.actor_event).toBe("unknown_failed");
   });
 });

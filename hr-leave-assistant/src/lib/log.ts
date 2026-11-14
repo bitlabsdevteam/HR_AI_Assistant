@@ -67,7 +67,15 @@ export interface CompletionLog {
     | "invalid_conversation_id"
     | "actor_unavailable"
     | "kv_missing"
-    | "kv_error";
+    | "kv_error"
+    | "policy_bucket_error"
+    | "policy_parse_error";
+  /** Names of dependencies that failed during an ops check. */
+  failed?: string[];
+  /** Per-dependency timing in milliseconds (ops check). */
+  deps_ms?: Record<string, number>;
+  /** Actor-level event describing the state-changing outcome of an actor call. */
+  actor_event?: string;
 }
 
 /**
