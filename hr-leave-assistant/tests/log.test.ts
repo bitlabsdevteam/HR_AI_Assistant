@@ -167,6 +167,13 @@ function assertRequiredFields(line: Record<string, unknown>): void {
   expect(line.duration_ms).toBeGreaterThanOrEqual(0);
 }
 
+async function parseToolResponse(result: Response): Promise<{ ok: boolean; data?: { source?: string } }> {
+  const body = (await result.json()) as Record<string, unknown>;
+  const resultObj = body.result as { content: Array<{ text: string }> } | undefined;
+  const textBlock = resultObj?.content?.[0]?.text ?? "{}";
+  return JSON.parse(textBlock) as { ok: boolean; data?: { source?: string } };
+}
+
 function makeWebhookRequest(body: unknown): Request {
   return new Request("http://localhost/webhooks/dynamic-variables", {
     method: "POST",
@@ -481,10 +488,7 @@ describe("completion log coverage", () => {
 
       const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
       const jsonLogs = parseLogLines(logs);
-      const body = (await result.json()) as Record<string, unknown>;
-      const resultObj = body.result as { content: Array<{ text: string }> } | undefined;
-      const textBlock = resultObj?.content?.[0]?.text ?? "{}";
-      const parsed = JSON.parse(textBlock) as { ok: boolean; data?: { source?: string } };
+      const parsed = await parseToolResponse(result);
 
       expect(result.status).toBe(200);
       expect(jsonLogs).toHaveLength(1);
@@ -508,10 +512,7 @@ describe("completion log coverage", () => {
 
       const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
       const jsonLogs = parseLogLines(logs);
-      const body = (await result.json()) as Record<string, unknown>;
-      const resultObj = body.result as { content: Array<{ text: string }> } | undefined;
-      const textBlock = resultObj?.content?.[0]?.text ?? "{}";
-      const parsed = JSON.parse(textBlock) as { ok: boolean; data?: { source?: string } };
+      const parsed = await parseToolResponse(result);
 
       expect(result.status).toBe(200);
       expect(jsonLogs).toHaveLength(1);
@@ -537,10 +538,7 @@ describe("completion log coverage", () => {
 
       const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
       const jsonLogs = parseLogLines(logs);
-      const body = (await result.json()) as Record<string, unknown>;
-      const resultObj = body.result as { content: Array<{ text: string }> } | undefined;
-      const textBlock = resultObj?.content?.[0]?.text ?? "{}";
-      const parsed = JSON.parse(textBlock) as { ok: boolean; data?: { source?: string } };
+      const parsed = await parseToolResponse(result);
 
       expect(result.status).toBe(200);
       expect(jsonLogs).toHaveLength(1);
