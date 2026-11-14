@@ -232,3 +232,34 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - **What went wrong / open items**: None.
 
 **Commit**: `feat: logging gaps #41 #42 #43 — policy error detail, ops failed deps, actor events`
+
+## 2026-11-14 — review: get_leave_policy bucket path
+
+- **Reviewed**: d50ec12 (bucket read added in cd78348, #27). `npm run typecheck` and `npm test` pass (106 tests).
+- **Findings raised**: (1) bucket is a second source of truth for policy text while leave rules still read KV, so spoken policy can contradict enforcement; (2) Cloud Storage not in TDD §3.1 or the §6 tool row; (3) no test or smoke check covers the bucket-success path or asserts `source`; (4) `observation.kv` is set to "hit" when the answer came from the bucket; (5) serial KV then bucket reads with no deadline; (6) no DEVLOG entry for #27 naming the model ID or deployed evidence. Not RAG: a fixed-topic JSON lookup.
+- **Fixed**: none yet.
+
+## 2026-11-14 — build: #53 get_leave_policy remove bucket read, #56 docs
+
+- **Model ID**: telnyx/moonshotai/Kimi-K2.6
+- **Tickets**: #53 (remove bucket read, restore single policy source), #54 (noted as David's portal steps), #56 (docs update)
+- **Built**:
+  1. Removed Cloud Storage bucket read from `get_leave_policy` in `src/tools.ts`. Now reads only through `loadCompanyProfile` (KV → bundled default).
+  2. Deleted `src/lib/bucket-policy.ts`.
+  3. Removed `HR_POLICY_BUCKET` from `AppEnv` in `src/env.ts` and the `[storage.cloudstorage.HR_POLICY_BUCKET]` block from `telnyx.toml`.
+  4. Removed `policy_bucket_error` and `policy_parse_error` from `CompletionLog["detail"]` in `src/lib/log.ts`.
+  5. `get_leave_policy` now returns `source: "kv"` when KV hit, `source: "fallback"` when KV missing or errored. `observation.kv` carries the real KV status.
+  6. Updated tests:
+     - `tests/log.test.ts`: removed bucket-stub mock and two bucket-failure tests; added three tests covering KV hit (source `"kv"`), KV missing (source `"fallback"`), and KV error (source `"fallback"`, detail `"kv_error"`).
+     - `tests/tools-secret.test.ts`, `tests/kv.test.ts`, `tests/token-handoff.test.ts`: removed `HR_POLICY_BUCKET` from mock envs.
+  7. `scripts/smoke.sh`: parses and asserts `source` is `"kv"` or `"fallback"` for `get_leave_policy`.
+  8. Docs:
+     - `docs/TDD.md` §3.1: added row for embedded `hr-policy` bucket + platform `retrieval` tool.
+     - `docs/TDD.md` §6.1 N50: updated instructions to use `get_leave_policy` for fixed topics and `retrieval` for open-ended questions.
+     - `docs/TDD.md` §7.2: noted bucket read removed from `get_leave_policy`.
+     - `AGENTS.md`: added "Policy comes from KV" invariant.
+- **Local checks**: `npm run typecheck` passes; `npm test` passes (106 tests across 12 files).
+- **Deploy**: pending David's go-ahead.
+- **What went wrong / open items**: None.
+
+**Commit**: `feat: #53 remove bucket read from get_leave_policy, single source KV + fallback; #56 docs`

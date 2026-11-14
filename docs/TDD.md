@@ -67,6 +67,7 @@ Two separate paths share one `call_ref`. Path 1 runs once at call start: the web
 | Signature check, session token, policy validation (leave year, notice, holidays, working-day count), response shaping | Function | Stateless and safe to run anywhere, any number of times. |
 | Pause flag `flags/leave_changes_enabled` | KV | Read on every call start and again on every apply or cancel, written rarely, a few seconds of staleness is harmless, changed without a redeploy. |
 | Leave policy and company profile (name, hours, holidays, leave year, policy answers) | KV, with a bundled default | Read-heavy public content the operator can edit without a redeploy. A missing or bad value falls back to the bundled copy. |
+| Open-ended HR policy and benefits text | Cloud Storage (embedded `hr-policy` bucket) plus the platform `retrieval` tool | Too large and too free-form for KV; answered by the platform `retrieval` tool over the embedded bucket. |
 | Per-caller call count | `CallerProfile` actor | A read-modify-write on one entity. Two simultaneous calls from one number must each count once; KV has no compare-and-set and would lose one. [S09, S11] |
 | PIN attempts and lockout | `EmployeeLeave` actor | "Count this failure, and lock at three" is a read-modify-write. Parallel guesses must not get extra tries. |
 | Leave balance, leave requests, the overlap check | `EmployeeLeave` actor | "Is there enough balance and no overlap? Then reserve it" must be one serialized step for one employee. The entity is the employee, so one instance per employee. Two simultaneous requests for the same employee cannot both spend the last days. [S09, S10] |
@@ -265,7 +266,7 @@ Assistant-level instructions hold identity, scope, style (short sentences, one q
 | N30 Dates | Prompt | Today is `{{today_spoken}}` (`{{today_iso}}`). Settle the first and last day of leave. Call `preview_leave` and say the number of working days and the days left afterwards. | `preview_leave` |
 | N35 Confirm apply | Prompt | Read back first day, last day, working days, and days left. On a clear yes, call `apply_leave`. | `apply_leave` |
 | N40 Cancel | Prompt | Settle which leave to cancel using the upcoming leave from N10, by its first day. Read it back with the days that will be restored. On a clear yes, call `cancel_leave`. | `cancel_leave` |
-| N50 Policy | Prompt | Answer from `get_leave_policy` only; say so when the answer is not there. | `get_leave_policy` |
+| N50 Policy | Prompt | Use `get_leave_policy` for entitlement, notice, carry-over, holidays, process and hours; use `retrieval` for anything else; if neither has the answer, say so and offer an HR callback; never read out personal data from the document. | `get_leave_policy`, `retrieval` |
 | N70 Callback | Prompt | The escalation path. Get consent, name, number, and reason; call `request_hr_callback`. Offer the number they are calling from, `{{telnyx_end_user_target}}`. When `{{is_open_now}}` is `false`, say the HR team will call on the next business day. | `request_hr_callback` |
 | N80 Close | Prompt | Repeat the reference if there is one, offer further help, end the call. | hang up |
 | N90 Degraded | Prompt | Apologize, say leave services are unavailable right now, ask the caller to try again later, end the call. | hang up |
@@ -370,7 +371,7 @@ type ErrorCode = "invalid_input" | "unauthenticated" | "auth_failed" | "locked"
 
 | Tool | Input | Success output | Behavior |
 | --- | --- | --- | --- |
-| `get_leave_policy` | `topic`: `entitlement` \| `notice` \| `carry_over` \| `holidays` \| `process` \| `hours` | Approved policy as short sentences | No sign-in needed. Reads the profile from KV (bundled default on a miss). Read-only. |
+| `get_leave_policy` | `topic`: `entitlement` \| `notice` \| `carry_over` \| `holidays` \| `process` \| `hours` | Approved policy as short sentences | No sign-in needed. Reads the profile from KV (bundled default on a miss). Read-only. The bucket read was removed; this tool is the structured lookup only. |
 | `verify_employee` | `employee_number` (4 digits), `pin` (4 digits) | `auth_token`, `first_name` | §7.1. A wrong PIN returns `auth_failed` with `attempts_left`; a locked employee returns `locked`. |
 | `get_leave_balance` | `auth_token` | `entitlement_days`, `used_days`, `remaining_days`, `upcoming[]` of `{ first_day, last_day, working_days, reference }` with spoken dates | Read-only. Upcoming means approved leave that starts after today. |
 | `preview_leave` | `auth_token`, `start_date`, `end_date` (`YYYY-MM-DD`) | `working_days`, `remaining_after`, spoken dates | Function validates the dates (§8.3), counts working days, and asks the actor whether the balance and the calendar allow it. Read-only. Returns `changes_paused` when the flag is off. |

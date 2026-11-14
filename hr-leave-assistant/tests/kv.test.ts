@@ -77,27 +77,7 @@ function createMockEnv(kvGet: (key: string) => Promise<unknown>): AppEnv {
           ping: async () => "ok" as const,
         } as ReturnType<AppEnv["CALLER_PROFILE"]["idFromName"]>),
     },
-    HR_POLICY_BUCKET: {
-      get: async () => null,
-      put: async () => null,
-      head: async () => null,
-      delete: async () => {},
-      list: async () => ({ objects: [], delimitedPrefixes: [], truncated: false }),
-      createMultipartUpload: async () => ({
-        key: "",
-        uploadId: "",
-        uploadPart: async () => ({ partNumber: 1, etag: "" }),
-        complete: async () => ({ key: "", writeHttpMetadata: vi.fn(() => {}) }),
-        abort: async () => {},
-      }),
-      resumeMultipartUpload: vi.fn(() => ({
-        key: "",
-        uploadId: "",
-        uploadPart: async () => ({ partNumber: 1, etag: "" }),
-        complete: async () => ({ key: "", writeHttpMetadata: vi.fn(() => {}) }),
-        abort: async () => {},
-      })),
-    },
+
   } as AppEnv;
 }
 

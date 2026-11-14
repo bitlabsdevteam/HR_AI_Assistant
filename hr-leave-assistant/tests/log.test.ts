@@ -126,27 +126,7 @@ function createMockEnv(options: {
         ping: vi.fn(async () => "ok" as const),
       }),
     },
-    HR_POLICY_BUCKET: {
-      get: vi.fn(async () => null),
-      put: vi.fn(async () => null),
-      head: vi.fn(async () => null),
-      delete: vi.fn(async () => {}),
-      list: vi.fn(async () => ({ objects: [], delimitedPrefixes: [], truncated: false })),
-      createMultipartUpload: vi.fn(async () => ({
-        key: "",
-        uploadId: "",
-        uploadPart: vi.fn(async () => ({ partNumber: 1, etag: "" })),
-        complete: vi.fn(async () => ({ key: "", writeHttpMetadata: vi.fn(() => {}) })),
-        abort: vi.fn(async () => {}),
-      })),
-      resumeMultipartUpload: vi.fn(() => ({
-        key: "",
-        uploadId: "",
-        uploadPart: vi.fn(async () => ({ partNumber: 1, etag: "" })),
-        complete: vi.fn(async () => ({ key: "", writeHttpMetadata: vi.fn(() => {}) })),
-        abort: vi.fn(async () => {}),
-      })),
-    },
+
   } as AppEnv;
 }
 
@@ -185,6 +165,13 @@ function assertRequiredFields(line: Record<string, unknown>): void {
   expect(typeof line.status).toBe("number");
   expect(typeof line.duration_ms).toBe("number");
   expect(line.duration_ms).toBeGreaterThanOrEqual(0);
+}
+
+async function parseToolResponse(result: Response): Promise<{ ok: boolean; data?: { source?: string } }> {
+  const body = (await result.json()) as Record<string, unknown>;
+  const resultObj = body.result as { content: Array<{ text: string }> } | undefined;
+  const textBlock = resultObj?.content?.[0]?.text ?? "{}";
+  return JSON.parse(textBlock) as { ok: boolean; data?: { source?: string } };
 }
 
 function makeWebhookRequest(body: unknown): Request {
@@ -460,7 +447,80 @@ describe("completion log coverage", () => {
       expect(jsonLogs[0]!.actor_event).toBe("pin_verified");
     });
 
-    it("logs detail kv_error when KV fails during get_leave_policy", async () => {
+    it("returns source kv and logs kv hit when KV has the profile during get_leave_policy", async () => {
+      const env = createMockEnv();
+      env.HR_KV.get = vi.fn(async () => ({
+        companyName: "Acme Corp",
+        timezone: "UTC",
+        entitlementDays: 20,
+        hours: {
+          monday: { open: "09:00", close: "17:00" },
+          tuesday: { open: "09:00", close: "17:00" },
+          wednesday: { open: "09:00", close: "17:00" },
+          thursday: { open: "09:00", close: "17:00" },
+          friday: { open: "09:00", close: "17:00" },
+          saturday: null,
+          sunday: null,
+        },
+        leaveYear: { start: "2026-01-01", end: "2026-12-31" },
+        holidays: ["2026-12-25"],
+        minNoticeDays: 1,
+        maxRequestDays: 10,
+        policy: {
+          entitlement: "You get 20 days.",
+          notice: "Two weeks.",
+          carry_over: "Use it or lose it.",
+          holidays: "Public holidays.",
+          process: "Apply online.",
+          hours: "Nine to five.",
+        },
+      })) as unknown as AppEnv["HR_KV"]["get"];
+      const req = makeMcpRequest("POST", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "get_leave_policy",
+          arguments: { topic: "entitlement" },
+          _meta: { telnyx_conversation_id: "conv_test" },
+        },
+      });
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+      const parsed = await parseToolResponse(result);
+
+      expect(result.status).toBe(200);
+      expect(jsonLogs).toHaveLength(1);
+      expect(jsonLogs[0]!.kv).toBe("hit");
+      expect(parsed.data?.source).toBe("kv");
+    });
+
+    it("returns source fallback and logs kv missing when KV is absent during get_leave_policy", async () => {
+      const env = createMockEnv();
+      env.HR_KV.get = vi.fn(async () => null);
+      const req = makeMcpRequest("POST", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "get_leave_policy",
+          arguments: { topic: "entitlement" },
+          _meta: { telnyx_conversation_id: "conv_test" },
+        },
+      });
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+      const parsed = await parseToolResponse(result);
+
+      expect(result.status).toBe(200);
+      expect(jsonLogs).toHaveLength(1);
+      expect(jsonLogs[0]!.kv).toBe("missing");
+      expect(parsed.data?.source).toBe("fallback");
+    });
+
+    it("returns source fallback, logs detail kv_error, when KV fails during get_leave_policy", async () => {
       const env = createMockEnv();
       env.HR_KV.get = vi.fn(async () => {
         throw new Error("kv outage");
@@ -478,62 +538,13 @@ describe("completion log coverage", () => {
 
       const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
       const jsonLogs = parseLogLines(logs);
+      const parsed = await parseToolResponse(result);
 
       expect(result.status).toBe(200);
       expect(jsonLogs).toHaveLength(1);
       expect(jsonLogs[0]!.detail).toBe("kv_error");
-      expect(jsonLogs[0]!.outcome).toBe("ok");
-    });
-
-    it("logs detail policy_bucket_error when bucket get throws during get_leave_policy", async () => {
-      const env = createMockEnv();
-      env.HR_POLICY_BUCKET.get = vi.fn(async () => {
-        throw new Error("storage down");
-      });
-      const req = makeMcpRequest("POST", {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: {
-          name: "get_leave_policy",
-          arguments: { topic: "entitlement" },
-          _meta: { telnyx_conversation_id: "conv_test" },
-        },
-      });
-
-      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
-      const jsonLogs = parseLogLines(logs);
-
-      expect(result.status).toBe(200);
-      expect(jsonLogs).toHaveLength(1);
-      expect(jsonLogs[0]!.detail).toBe("policy_bucket_error");
-      expect(jsonLogs[0]!.outcome).toBe("ok");
-    });
-
-    it("logs detail policy_parse_error when bucket returns invalid JSON during get_leave_policy", async () => {
-      const env = createMockEnv();
-      env.HR_POLICY_BUCKET.get = vi.fn(async () => ({
-        body: {},
-        json: async () => ({ invalid: true }),
-      } as unknown as Awaited<ReturnType<AppEnv["HR_POLICY_BUCKET"]["get"]>>));
-      const req = makeMcpRequest("POST", {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: {
-          name: "get_leave_policy",
-          arguments: { topic: "entitlement" },
-          _meta: { telnyx_conversation_id: "conv_test" },
-        },
-      });
-
-      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
-      const jsonLogs = parseLogLines(logs);
-
-      expect(result.status).toBe(200);
-      expect(jsonLogs).toHaveLength(1);
-      expect(jsonLogs[0]!.detail).toBe("policy_parse_error");
-      expect(jsonLogs[0]!.outcome).toBe("ok");
+      expect(jsonLogs[0]!.kv).toBe("error");
+      expect(parsed.data?.source).toBe("fallback");
     });
   });
 

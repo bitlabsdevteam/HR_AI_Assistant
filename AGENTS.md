@@ -114,6 +114,7 @@ When something breaks in a way that takes more than a few minutes to find, creat
 - **People are pseudonyms.** Logs and actor names carry the HMAC of a phone number or employee number, shown as its first 8 hex characters. Names, raw numbers, employee numbers, PINs, tokens, bearer values, and request bodies stay out of logs, error messages, and counters.
 - **PINs are guarded.** Store only the HMAC. Compare in constant time. Answer an unknown employee number exactly as a wrong PIN: same code, same wording, same `attempts_left` countdown, same lock (`HrDesk.failUnknown` keeps the count for numbers that are not on the roster). Three failures lock the employee for 15 minutes. Never speak, log, or return a PIN.
 - **Fail closed on auth.** A missing secret means `401`, on `/mcp`, `/ops`, and `/admin` alike.
+- **Policy comes from KV.** `get_leave_policy` reads the structured profile from KV (bundled default on a miss). It never reads from Cloud Storage. Open-ended policy questions are handled by the platform `retrieval` tool over the embedded `hr-policy` bucket, configured in the assistant workflow.
 - **Domain code is pure.** `src/domain/` imports nothing from `@telnyx/edge-runtime`; time comes in as an argument.
 
 ## What the graders score
