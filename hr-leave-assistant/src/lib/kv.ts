@@ -11,8 +11,8 @@ export interface CompanyContext {
   profile: CompanyProfile;
   /** Whether employees are currently allowed to apply or cancel leave. */
   leaveChangesEnabled: boolean;
-  /** Whether all KV reads succeeded ("hit") or fell back to defaults ("fallback"). */
-  kv: "hit" | "fallback";
+  /** Whether all KV reads succeeded ("hit"), were missing ("missing"), or errored ("error"). */
+  kv: "hit" | "missing" | "error";
 }
 
 /**
@@ -24,17 +24,18 @@ export interface CompanyContext {
  */
 export async function loadCompanyProfile(
   env: AppEnv,
-): Promise<{ profile: CompanyProfile; kv: "hit" | "fallback" }> {
+): Promise<{ profile: CompanyProfile; kv: "hit" | "missing" | "error" }> {
   try {
     const stored = await env.HR_KV.get<unknown>("profile/current", { type: "json" });
     const profile = parseCompanyProfile(stored);
     if (profile) {
       return { profile, kv: "hit" };
     }
+    return { profile: DEFAULT_PROFILE, kv: "missing" };
   } catch {
     // The bundled policy is the deliberate, non-sensitive fallback.
+    return { profile: DEFAULT_PROFILE, kv: "error" };
   }
-  return { profile: DEFAULT_PROFILE, kv: "fallback" };
 }
 
 /**
@@ -46,16 +47,17 @@ export async function loadCompanyProfile(
  */
 export async function loadLeaveChangesFlag(
   env: AppEnv,
-): Promise<{ enabled: boolean; kv: "hit" | "fallback" }> {
+): Promise<{ enabled: boolean; kv: "hit" | "missing" | "error" }> {
   try {
     const value = await env.HR_KV.get("flags/leave_changes_enabled");
     if (value === "true" || value === "false") {
       return { enabled: value === "true", kv: "hit" };
     }
+    return { enabled: true, kv: "missing" };
   } catch {
     // A failed or absent flag does not disable read-only functionality.
+    return { enabled: true, kv: "error" };
   }
-  return { enabled: true, kv: "fallback" };
 }
 
 /**
@@ -70,9 +72,18 @@ export async function loadCompanyContext(env: AppEnv): Promise<CompanyContext> {
     loadLeaveChangesFlag(env),
   ]);
 
+  const kv:
+    | "hit"
+    | "missing"
+    | "error" = profileResult.kv === "error" || flagResult.kv === "error"
+      ? "error"
+      : profileResult.kv === "missing" || flagResult.kv === "missing"
+        ? "missing"
+        : "hit";
+
   return {
     profile: profileResult.profile,
     leaveChangesEnabled: flagResult.enabled,
-    kv: profileResult.kv === "hit" && flagResult.kv === "hit" ? "hit" : "fallback",
+    kv,
   };
 }
