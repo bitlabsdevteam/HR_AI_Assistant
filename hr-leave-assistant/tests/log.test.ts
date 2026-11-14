@@ -569,6 +569,36 @@ describe("completion log coverage", () => {
     });
   });
 
+  describe("router catch", () => {
+    it("writes exactly one JSON log line when a synchronous throw occurs in the router before any handler runs", async () => {
+      const env = createMockEnv();
+      const req = new Request("http://localhost/health/liveness");
+
+      const spy = vi.spyOn(req, "method", "get").mockImplementation(() => {
+        throw new Error("sync boom");
+      });
+
+      try {
+        const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+        const jsonLogs = parseLogLines(logs);
+
+        expect(result.status).toBe(500);
+        expect(jsonLogs).toHaveLength(1);
+        assertRequiredFields(jsonLogs[0]!);
+        expect(jsonLogs[0]!.event).toBe("router.completed");
+        expect(jsonLogs[0]!.outcome).toBe("error");
+        expect(jsonLogs[0]!.status).toBe(500);
+        expect(jsonLogs[0]!.call_ref).toBe("none");
+
+        // The raw error message must not leak into the log line
+        const allText = logs.join(" ");
+        expect(allText).not.toContain("sync boom");
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe("trace field", () => {
     it('is "off" when Langfuse secrets are missing', async () => {
       const env = createMockEnv();
