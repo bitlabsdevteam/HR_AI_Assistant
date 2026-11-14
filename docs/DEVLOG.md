@@ -263,3 +263,71 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - **What went wrong / open items**: None.
 
 **Commit**: `feat: #53 remove bucket read from get_leave_policy, single source KV + fallback; #56 docs`
+
+## 2026-11-14 — review: dynamic variables and where the webhook sits in the workflow (Claude Code, documents only)
+
+- **Reviewed**: TDD §5 and §6 against `hr-leave-assistant/src/webhook.ts` at c517ee6. No code run, nothing deployed, no remote action. Advisor reviewed the first diagram; its placement verdict stands and three of my own diagram errors were corrected (below).
+- **Wiki relied on**: `Telynyx/wiki/entities/dynamic-webhook-variables.md`, `Telynyx/wiki/telnyx/assistants/assistants-dynamic-variables.md` (both `evidence: stated`).
+- **Status of everything below**: planned. Nothing has run on the account (C-2, C-5, C-7 still open).
+
+### Variables the workflow needs (OpenCode: build the webhook and the portal defaults to match)
+
+All values are strings. The webhook returns exactly these eight under `dynamic_variables`. Telnyx fills `{{telnyx_end_user_target}}` itself; the webhook only reads it.
+
+| Variable | Webhook value | Assistant-side default | Read by | Role |
+| --- | --- | --- | --- | --- |
+| `company_name` | KV profile | `"Cedar Group"` | N00 | text |
+| `today_iso` | function clock, company zone | none | N30 | text |
+| `today_spoken` | function clock, company zone | none | N30 | text |
+| `is_open_now` | profile hours | `"false"` | N70; N60 edge (Should tier) | text, and routes N60 |
+| `leave_changes_enabled` | KV `flags/leave_changes_enabled` | `"false"` | edges N30 to N12, N40 to N12 | **routes** |
+| `caller_status` | `CallerProfile`: `new`, `returning`, `unknown` | `"unknown"` | N01 | text |
+| `context_status` | `"ready"` when the webhook answered | `"degraded"` | edge N01 to N90 | **routes** |
+| `call_ref` | `c_` plus 12 hex | `"none"` | passed to tools | correlation ID only |
+
+Portal: set `dynamic_variables_webhook_timeout_ms` to 3000 (default 1500). `today_iso` and `today_spoken` have no assistant default, so on a webhook timeout they stay raw `{{...}}`; this is harmless only because `context_status = "degraded"` sends the call to N90 first.
+
+Not dynamic variables: the session token (a `verify_employee` tool result, never from the webhook), the employee number and the PIN (spoken by the caller, taken only by `verify_employee`).
+
+### Where the webhook sits
+
+The webhook is not a node. It runs once before N00 and resolves the variables the graph reads.
+
+```
+BEFORE THE GRAPH: assistant.initialization -> POST /webhooks/dynamic-variables
+  in:  telnyx_end_user_target, call_control_id
+  out: company_name today_iso today_spoken is_open_now
+       leave_changes_enabled caller_status context_status call_ref
+  fail or timeout -> assistant defaults (context_status = "degraded")
+
+N00 Disclosure (speak, {{company_name}}) -> N01 Intent ({{caller_status}})
+N01  == context_status != "ready" ==> N90 Degraded
+N01  -> N70 person | N50 policy | N10 balance/apply/cancel
+N10  -> N30 apply | N40 cancel | N80 | N50
+N10  -> N70 on `locked`, digits unclear twice, or caller asks for a person   (fallback)
+N30  == leave_changes_enabled == "false" ==> N12 Paused (speak) -> N70
+N40  == leave_changes_enabled == "false" ==> N12
+N30 -> N35 Confirm -> N80 (approved)
+N30/N35/N40 -> N10 on `unauthenticated`; -> N70 on repeated failure
+N50 -> N10 | N70 | N80
+N70 ({{is_open_now}}, {{telnyx_end_user_target}}) -> N80 on `queued` or decline; -> N90 if the tool fails
+N80 speaks the LV- or CB- reference (never call_ref) -> N01 on a new request
+Should tier: N01/N10/N30/N35/N40/N50 -> N60 Transfer; N60 == is_open_now == "false" ==> N70; transfer failed -> N70
+```
+
+`==>` is a variable edge (webhook-driven), `->` is an LLM edge. Full edge table: TDD §6.2, §6.3.
+
+Corrections to my first diagram: (1) N80 speaks the `reference` returned by `apply_leave`, `cancel_leave`, `request_hr_callback` (TDD §7.2 tool rows), not `call_ref`, which is a log-join key and must never be spoken; (2) N50 and N70 exits and the N60 transfer node (`is_open_now`, Should tier, C-6) were missing; (3) the N10 to N70 `locked` fallback was missing.
+
+### Findings raised (for OpenCode to fix; the fix is OpenCode's commit)
+
+1. **Non-blocking, `src/webhook.ts:294-295`**: `degradedVariablesResponse` computes `is_open_now` from the default profile and returns `leave_changes_enabled: "true"`. TDD §5 sets the assistant-side degraded defaults to `"false"` for both. Failing open is hidden today because `context_status: "degraded"` routes to N90 before either variable is read. It breaks if the degraded route is ever softened. Fix: return `"false"` for both in the degraded response, or record the reason for the difference in the DEVLOG and the TDD. Add a test that asserts the degraded response values.
+2. **Check, `src/webhook.ts:140-150`**: the happy-path response must contain exactly the eight keys in the table. Add a test that asserts the key set and that every value is a string.
+
+### Demo note (so the route change is not expected on a happy path)
+
+- `context_status` to N90 fires only when the webhook fails or times out. Point the assistant at a dead URL once (TDD §12 phone-call list).
+- `leave_changes_enabled` to N12 needs the KV flag set to `"false"`, a verified caller, and a request to apply or cancel.
+- On a normal call neither variable edge fires. GRADING_MAP "Creative dynamic webhook variables" is met only with one of these two runs captured in the logs.
+
+- **Fixed**: none yet. Review line: reviewed c517ee6 (webhook.ts and TDD §5, §6); findings raised 2; fixed 0.
