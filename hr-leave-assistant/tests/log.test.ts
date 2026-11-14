@@ -438,6 +438,103 @@ describe("completion log coverage", () => {
       const allText = allLogs.join(" ");
       expect(allText).not.toContain(token);
     });
+
+    it("logs actor_event for verify_employee", async () => {
+      const env = createMockEnv();
+      const req = makeMcpRequest("POST", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "verify_employee",
+          arguments: { employee_number: "1001", pin: "1111" },
+          _meta: { telnyx_conversation_id: "conv_test" },
+        },
+      });
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(200);
+      expect(jsonLogs).toHaveLength(1);
+      expect(jsonLogs[0]!.actor_event).toBe("pin_verified");
+    });
+
+    it("logs detail kv_error when KV fails during get_leave_policy", async () => {
+      const env = createMockEnv();
+      env.HR_KV.get = vi.fn(async () => {
+        throw new Error("kv outage");
+      });
+      const req = makeMcpRequest("POST", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "get_leave_policy",
+          arguments: { topic: "entitlement" },
+          _meta: { telnyx_conversation_id: "conv_test" },
+        },
+      });
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(200);
+      expect(jsonLogs).toHaveLength(1);
+      expect(jsonLogs[0]!.detail).toBe("kv_error");
+      expect(jsonLogs[0]!.outcome).toBe("ok");
+    });
+
+    it("logs detail policy_bucket_error when bucket get throws during get_leave_policy", async () => {
+      const env = createMockEnv();
+      env.HR_POLICY_BUCKET.get = vi.fn(async () => {
+        throw new Error("storage down");
+      });
+      const req = makeMcpRequest("POST", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "get_leave_policy",
+          arguments: { topic: "entitlement" },
+          _meta: { telnyx_conversation_id: "conv_test" },
+        },
+      });
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(200);
+      expect(jsonLogs).toHaveLength(1);
+      expect(jsonLogs[0]!.detail).toBe("policy_bucket_error");
+      expect(jsonLogs[0]!.outcome).toBe("ok");
+    });
+
+    it("logs detail policy_parse_error when bucket returns invalid JSON during get_leave_policy", async () => {
+      const env = createMockEnv();
+      env.HR_POLICY_BUCKET.get = vi.fn(async () => ({
+        body: {},
+        json: async () => ({ invalid: true }),
+      } as unknown as Awaited<ReturnType<AppEnv["HR_POLICY_BUCKET"]["get"]>>));
+      const req = makeMcpRequest("POST", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "get_leave_policy",
+          arguments: { topic: "entitlement" },
+          _meta: { telnyx_conversation_id: "conv_test" },
+        },
+      });
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(200);
+      expect(jsonLogs).toHaveLength(1);
+      expect(jsonLogs[0]!.detail).toBe("policy_parse_error");
+      expect(jsonLogs[0]!.outcome).toBe("ok");
+    });
   });
 
   describe("ops route", () => {
@@ -469,6 +566,37 @@ describe("completion log coverage", () => {
       assertRequiredFields(jsonLogs[0]!);
       expect(jsonLogs[0]!.event).toBe("ops.completed");
       expect(jsonLogs[0]!.outcome).toBe("method_not_allowed");
+    });
+
+    it("names the failed dependency in failed and records deps_ms", async () => {
+      const env = createMockEnv();
+      const originalIdFromName = env.HR_DESK.idFromName;
+      env.HR_DESK.idFromName = (name: string) => {
+        const stub = originalIdFromName(name);
+        return {
+          ...stub,
+          ping: vi.fn(async () => {
+            throw new Error("hr_desk down");
+          }),
+        };
+      };
+
+      const req = makeOpsRequest("GET");
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(503);
+      expect(jsonLogs).toHaveLength(1);
+      assertRequiredFields(jsonLogs[0]!);
+      expect(jsonLogs[0]!.event).toBe("ops.completed");
+      expect(jsonLogs[0]!.outcome).toBe("error");
+      expect(jsonLogs[0]!.failed).toEqual(["hr_desk"]);
+      expect(jsonLogs[0]!.deps_ms).toMatchObject({
+        kv: expect.any(Number),
+        hr_desk: expect.any(Number),
+        caller_profile: expect.any(Number),
+        employee_leave: expect.any(Number),
+      });
     });
   });
 

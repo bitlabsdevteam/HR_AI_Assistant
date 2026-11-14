@@ -102,6 +102,7 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
   const startedAt = Date.now();
   let status = 200;
   let outcome: LogOutcome = "ok";
+  const dependencies: Record<string, { ok: boolean; ms: number }> = {};
 
   try {
     if (request.method !== "GET") {
@@ -113,8 +114,6 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
       outcome = "unauthorized";
       return errorResponse(new HttpRequestError(401, "unauthorized"));
     }
-
-    const dependencies: Record<string, { ok: boolean; ms: number }> = {};
 
     // KV check
     const kvStarted = Date.now();
@@ -188,12 +187,20 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
         duration_ms: durationMs,
       },
     });
+    const failedDeps = Object.entries(dependencies)
+      .filter(([, d]) => !d.ok)
+      .map(([name]) => name);
+    const depsMs = Object.fromEntries(
+      Object.entries(dependencies).map(([name, d]) => [name, d.ms]),
+    );
     writeCompletionLog({
       event: "ops.completed",
       call_ref: "none",
       outcome,
       status,
       duration_ms: durationMs,
+      failed: failedDeps.length > 0 ? failedDeps : undefined,
+      deps_ms: depsMs,
       trace,
     });
   }

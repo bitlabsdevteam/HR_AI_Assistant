@@ -11,6 +11,7 @@ import { createSessionToken, verifySessionToken } from "./lib/auth";
 import { loadCompanyContext, loadCompanyProfile } from "./lib/kv";
 import { employeeActorName, employeePseudonym, leaveRequestKey, newReference, pinHash, callbackRequestKey } from "./lib/identity";
 import { resolvePolicyAnswer } from "./lib/bucket-policy";
+import type { CompletionLog } from "./lib/log";
 
 /** Zod schema for get_leave_policy tool input. */
 const getLeavePolicyInputSchema = z.object({ topic: policyTopicSchema }).strict();
@@ -64,6 +65,10 @@ export interface McpObservation {
   emp?: string;
   actor_ms?: number;
   call_ref?: string;
+  /** Coarse failure cause for logging, set by the tool handler when a dependency fails. */
+  detail?: CompletionLog["detail"];
+  /** Actor-level event describing a state-changing actor outcome. */
+  actor_event?: string;
 }
 
 /**
@@ -156,6 +161,7 @@ export async function handleVerifyEmployee(
     const result = await withActorTiming(observation, () =>
       env.HR_DESK.idFromName("cedar").failUnknown(empHash, nowIso),
     );
+    observation.actor_event = result.status === "locked" ? "unknown_locked" : "unknown_failed";
     if (result.status === "locked") {
       return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
     }
@@ -166,6 +172,8 @@ export async function handleVerifyEmployee(
   const result = await withActorTiming(observation, () =>
     env.EMPLOYEE_LEAVE.idFromName(actorName).verifyPin(suppliedPinHash, nowIso),
   );
+
+  observation.actor_event = result.status === "ok" ? "pin_verified" : result.status === "locked" ? "pin_locked" : "pin_failed";
 
   if (result.status === "locked") {
     return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
@@ -213,7 +221,12 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
         const { profile, kv } = await loadCompanyProfile(env);
         observation.kv = kv;
         const typedTopic = topic as PolicyTopic;
-        const { answer, source } = await resolvePolicyAnswer(env.HR_POLICY_BUCKET, profile, typedTopic);
+        const { answer, source, error } = await resolvePolicyAnswer(env.HR_POLICY_BUCKET, profile, typedTopic);
+        if (error) {
+          observation.detail = error;
+        } else if (kv === "error") {
+          observation.detail = "kv_error";
+        }
         observation.kv = source === "bucket" ? "hit" : kv;
         return toolSuccess(answer, { topic: typedTopic, answer, source });
       } catch {
@@ -265,6 +278,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
       const summary = await withActorTiming(observation, () =>
         env.EMPLOYEE_LEAVE.idFromName(actorName).summary(todayIso),
       );
+      observation.actor_event = "balance_read";
 
       const upcomingText = summary.upcoming.length > 0
         ? ` Upcoming approved leave: ${summary.upcoming.map((u) => `${spokenIsoDate(u.start)} to ${spokenIsoDate(u.end)}, ${u.days} working days`).join("; ")}.`
@@ -331,6 +345,7 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
           days: validation.workingDays,
         }),
       );
+      observation.actor_event = actorCheck.ok ? "leave_previewed" : actorCheck.reason;
 
       if (!actorCheck.ok) {
         return toolError(
@@ -408,6 +423,10 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
         }),
       );
 
+      observation.actor_event = result.status === "approved"
+        ? (result.replayed ? "leave_replayed" : "leave_approved")
+        : result.status;
+
       if (result.status === "insufficient_balance") {
         return toolError(
           "insufficient_balance",
@@ -472,6 +491,10 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
         }),
       );
 
+      observation.actor_event = result.status === "cancelled"
+        ? (result.replayed ? "cancel_replayed" : "leave_cancelled")
+        : result.status;
+
       if (result.status === "not_found") {
         return toolError("not_found", "I couldn't find approved leave starting on that date.");
       }
@@ -520,6 +543,8 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
           nowIso: now.toISOString(),
         }),
       );
+
+      observation.actor_event = result.replayed ? "callback_replayed" : "callback_queued";
 
       const replayText = result.replayed ? " That request was already queued." : "";
       return toolSuccess(

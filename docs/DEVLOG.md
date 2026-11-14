@@ -199,3 +199,36 @@ One entry per OpenCode session (date, model ID, wiki pages consulted, what was b
 - **Revised recommendation**: Preserve the newer Portal HR prompt and the working verification edges. No new backend-code fix is indicated for this ordering issue. The `HR_MCP` allowlists remain null, so the optional allowlist restriction is additional enforcement, not a demonstrated prerequisite for the now-observed correct sequence. Portal server-level **Allowed tools** must not be described as a confirmed assistant-specific override UI; the latter is documented in the API only. Current-list reference inspection was inconclusive about whether the server is shared.
 - **Validation**: The existing diagnostic fails on the 07:43 evidence and passes on [the newer sanitized call sequence](diagnostics/2026-11-14-verification-hr-transfer-after-prompt-evidence.json). This is one observed corrected sequence, not a guarantee of model behavior or proof of successful connection to the destination. No Langfuse trace was fetched/generated or phone call placed by this investigation.
 - **Access limits**: Browser host unavailable; native Chrome inspection timed out. A read-only API check initially returned 401; running the previously approved CLI log reader refreshed the existing session and subsequent API reads succeeded. Portal click paths are backed by official documentation, not live UI observation. No credentials or raw caller speech were retained.
+
+## 2026-11-14 — build: tickets #41, #42, #43 (logging gaps)
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**: None for this slice (no platform features used; pure function fixes).
+- **What was built**:
+  1. Ticket #41 (`get_leave_policy` failure cause):
+     - `loadPolicyFromBucket` in `src/lib/bucket-policy.ts` now throws `policy_bucket_error` or `policy_parse_error` instead of returning `null` for actual errors. Missing objects still return `null` (no error).
+     - `resolvePolicyAnswer` catches these errors and returns them in an `error` field while falling back to the KV/bundled profile.
+     - `get_leave_policy` handler sets `observation.detail` to `"kv_error"`, `"policy_bucket_error"`, or `"policy_parse_error"`.
+     - `McpObservation` extended with `detail` field; `CompletionLog["detail"]` union expanded.
+     - `handleMcp` in `src/mcp.ts` logs `detail: metadata.detail ?? observation.detail`.
+  2. Ticket #42 (`ops.completed` failed dependency):
+     - `handleOpsCheck` in `src/index.ts` computes `failed: string[]` and `deps_ms: Record<string, number>` from the dependency checks.
+     - `CompletionLog` extended with `failed` and `deps_ms` fields.
+     - Log line includes them in `ops.completed`.
+  3. Ticket #43 (actors write no logs):
+     - **Chosen option: Option A** — log nothing in the actors. The handler sets `observation.actor_event` based on the actor result, and `handleMcp` logs it in the completion line.
+     - `McpObservation` extended with `actor_event?: string`; `CompletionLog` extended with `actor_event?: string`.
+     - All actor-calling tool handlers set `observation.actor_event`:
+       - `verify_employee`: `pin_verified`, `pin_failed`, `pin_locked`, `unknown_failed`, `unknown_locked`
+       - `get_leave_balance`: `balance_read`
+       - `preview_leave`: `leave_previewed`, `insufficient_balance`, `overlap`
+       - `apply_leave`: `leave_approved`, `leave_replayed`, `insufficient_balance`, `overlap`
+       - `cancel_leave`: `leave_cancelled`, `cancel_replayed`, `not_found`, `too_late`
+       - `request_hr_callback`: `callback_queued`, `callback_replayed`
+  4. Tests added:
+     - `tests/tools-secret.test.ts`: 5 new assertions on `observation.actor_event` for `handleVerifyEmployee` (ok, failed, locked, unknown).
+     - `tests/log.test.ts`: tests for `actor_event` in the `tool.completed` log line; tests for `detail` on `get_leave_policy` with KV/bucket/parse failures; test for `failed` and `deps_ms` in `ops.completed` when a dependency fails.
+  5. `npm run typecheck` passes; `npm test` passes (106 tests across 12 files).
+- **What went wrong / open items**: None.
+
+**Commit**: `feat: logging gaps #41 #42 #43 — policy error detail, ops failed deps, actor events`
