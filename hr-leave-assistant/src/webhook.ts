@@ -150,7 +150,11 @@ export async function handleDynamicVariables(
   } catch (error) {
     if (error instanceof HttpRequestError) {
       status = error.status;
-      outcome = error.code === "unauthorized" ? "unauthorized" : "invalid_input";
+      outcome = error.code === "unauthorized"
+        ? "unauthorized"
+        : error.code === "method_not_allowed"
+          ? "method_not_allowed"
+          : "invalid_input";
       return errorResponse(error);
     }
 

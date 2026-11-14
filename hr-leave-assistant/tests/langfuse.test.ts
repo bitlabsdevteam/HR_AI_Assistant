@@ -254,6 +254,7 @@ describe("exportSpan resilience", () => {
       { outcome: "overlap", expected: "WARNING" },
       { outcome: "unauthenticated", expected: "WARNING" },
       { outcome: "unauthorized", expected: "WARNING" },
+      { outcome: "method_not_allowed", expected: "WARNING" },
       { outcome: "error", expected: "ERROR" },
     ];
 

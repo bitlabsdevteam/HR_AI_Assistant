@@ -147,7 +147,11 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
   } catch (error) {
     if (error instanceof HttpRequestError) {
       status = error.status;
-      outcome = error.code === "unauthorized" ? "unauthorized" : "invalid_input";
+      outcome = error.code === "unauthorized"
+        ? "unauthorized"
+        : error.code === "method_not_allowed"
+          ? "method_not_allowed"
+          : "invalid_input";
       return errorResponse(error);
     }
     status = 500;
@@ -227,7 +231,11 @@ async function handleAdminRequests(request: Request, env: AppEnv): Promise<Respo
   } catch (error) {
     if (error instanceof HttpRequestError) {
       status = error.status;
-      outcome = error.code === "unauthorized" ? "unauthorized" : "invalid_input";
+      outcome = error.code === "unauthorized"
+        ? "unauthorized"
+        : error.code === "method_not_allowed"
+          ? "method_not_allowed"
+          : "invalid_input";
       return errorResponse(error);
     }
     status = 500;
@@ -278,7 +286,11 @@ async function handleAdminCallbacks(request: Request, env: AppEnv): Promise<Resp
   } catch (error) {
     if (error instanceof HttpRequestError) {
       status = error.status;
-      outcome = error.code === "unauthorized" ? "unauthorized" : "invalid_input";
+      outcome = error.code === "unauthorized"
+        ? "unauthorized"
+        : error.code === "method_not_allowed"
+          ? "method_not_allowed"
+          : "invalid_input";
       return errorResponse(error);
     }
     status = 500;
@@ -369,7 +381,11 @@ async function handleAdminStats(request: Request, env: AppEnv): Promise<Response
   } catch (error) {
     if (error instanceof HttpRequestError) {
       status = error.status;
-      outcome = error.code === "unauthorized" ? "unauthorized" : "invalid_input";
+      outcome = error.code === "unauthorized"
+        ? "unauthorized"
+        : error.code === "method_not_allowed"
+          ? "method_not_allowed"
+          : "invalid_input";
       return errorResponse(error);
     }
     status = 500;
@@ -445,7 +461,11 @@ async function handleAdminReset(request: Request, env: AppEnv): Promise<Response
   } catch (error) {
     if (error instanceof HttpRequestError) {
       status = error.status;
-      outcome = error.code === "unauthorized" ? "unauthorized" : "invalid_input";
+      outcome = error.code === "unauthorized"
+        ? "unauthorized"
+        : error.code === "method_not_allowed"
+          ? "method_not_allowed"
+          : "invalid_input";
       return errorResponse(error);
     }
     status = 500;
