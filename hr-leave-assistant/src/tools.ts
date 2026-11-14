@@ -60,7 +60,7 @@ const requestHrCallbackInputSchema = z.object({
 
 /** Observation object shared between the MCP handler and tool implementations. */
 export interface McpObservation {
-  kv?: "hit" | "fallback";
+  kv?: "hit" | "missing" | "error";
   emp?: string;
   actor_ms?: number;
   call_ref?: string;

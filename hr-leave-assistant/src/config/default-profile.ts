@@ -63,7 +63,7 @@ export interface CompanyProfile {
 
 /**
  * Fallback profile for the fictional Cedar Group. Used whenever KV cannot supply a valid
- * profile; callers see `kv: "fallback"` in the logs. The numbers and dates in `policy`
+ * profile; callers see `kv: "missing"` or `kv: "error"` in the logs. The numbers and dates in `policy`
  * are written out by hand, so update them together with the structured fields above.
  */
 export const DEFAULT_PROFILE: CompanyProfile = {

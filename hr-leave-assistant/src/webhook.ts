@@ -51,7 +51,7 @@ export async function handleDynamicVariables(
   let callRef = "none";
   let caller: string | undefined;
   let actorMilliseconds: number | undefined;
-  let kv: "hit" | "fallback" | undefined;
+  let kv: "hit" | "missing" | "error" | undefined;
   let detail: CompletionLog["detail"];
   let signatureVerified = false;
   let conversationId: string | undefined;
@@ -118,10 +118,12 @@ export async function handleDynamicVariables(
     const context =
       contextResult.status === "fulfilled"
         ? contextResult.value
-        : { profile: DEFAULT_PROFILE, leaveChangesEnabled: true, kv: "fallback" as const };
+        : { profile: DEFAULT_PROFILE, leaveChangesEnabled: true, kv: "error" as const };
     kv = context.kv;
-    if (context.kv === "fallback") {
-      detail = "kv_fallback";
+    if (context.kv === "missing") {
+      detail = "kv_missing";
+    } else if (context.kv === "error") {
+      detail = "kv_error";
     }
 
     let callerStatus: "new" | "returning" | "unknown" = "unknown";

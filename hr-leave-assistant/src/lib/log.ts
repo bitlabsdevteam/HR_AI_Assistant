@@ -53,20 +53,21 @@ export interface CompletionLog {
   tool?: string;
   /** Time spent waiting for actor calls in milliseconds. */
   actor_ms?: number;
-  /** Whether KV read was a hit or fell back to defaults. */
-  kv?: "hit" | "fallback";
+  /** Whether KV read was a hit, missing, or errored. */
+  kv?: "hit" | "missing" | "error";
   /** What happened to the Langfuse trace export: sent, skipped, failed, or off. */
   trace?: "sent" | "skipped" | "failed" | "off";
   /** Request path, for router events that hit an unknown route. Query string is excluded. */
   path?: string;
-  /** Additional detail for debugging (e.g. "invalid_payload", "kv_fallback"). */
+  /** Additional detail for debugging (e.g. "invalid_payload", "kv_missing"). */
   detail?:
     | "invalid_payload"
     | "missing_hash_key"
     | "missing_conversation_id"
     | "invalid_conversation_id"
     | "actor_unavailable"
-    | "kv_fallback";
+    | "kv_missing"
+    | "kv_error";
 }
 
 /**
