@@ -331,3 +331,19 @@ Corrections to my first diagram: (1) N80 speaks the `reference` returned by `app
 - On a normal call neither variable edge fires. GRADING_MAP "Creative dynamic webhook variables" is met only with one of these two runs captured in the logs.
 
 - **Fixed**: none yet. Review line: reviewed c517ee6 (webhook.ts and TDD §5, §6); findings raised 2; fixed 0.
+
+## 2026-11-14 — ship: re-deploy existing codebase from clean working tree
+
+- **Model ID**: telnyx/moonshotai/Kimi-K2.6
+- **Wiki consulted**: none (no platform feature touched; local compilation and ship only)
+- **What was done**:
+  1. Ran `npm run typecheck` — passed, no errors.
+  2. Ran `npm test` — 106 tests passed in 12 files.
+  3. Ran `telnyx-edge ship` — build succeeded, revision `db1e1073382a` created.
+  4. `telnyx-edge ship status` reports "The function's latest build succeeded."
+  5. `telnyx-edge deployments` shows new revision `db1e1073382a` with `deploy_status: "pending"`; prior revision `3b72605631fd` remains `active: true`.
+  6. Smoke test (`scripts/smoke.sh`) against active deployment passed: health 200, MCP 401 without bearer, ops 401 without bearer, `tools/list` returns 7 tools, `get_leave_policy` returns KV-sourced answer, admin reset 200, admin requests shows four demo employees.
+- **What went wrong / what is open**:
+  - New revision is still `pending` 5+ minutes after ship. This is normal for Telnyx Edge; the prior revision remains active and functional. Will monitor.
+  - No code changes in this session — the repo was clean before ship. The ship re-bundles the current committed state.
+- **Slice outcome**: local green; deployment pending; smoke green against active revision.
