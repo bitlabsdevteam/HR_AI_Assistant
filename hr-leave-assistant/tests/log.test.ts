@@ -287,7 +287,7 @@ describe("completion log coverage", () => {
       expect(jsonLogs).toHaveLength(1);
       assertRequiredFields(jsonLogs[0]!);
       expect(jsonLogs[0]!.event).toBe("webhook.completed");
-      expect(jsonLogs[0]!.outcome).toBe("invalid_input");
+      expect(jsonLogs[0]!.outcome).toBe("method_not_allowed");
     });
 
     it("writes exactly one JSON log line when a secret throws after signature verification", async () => {
@@ -342,6 +342,26 @@ describe("completion log coverage", () => {
       assertRequiredFields(jsonLogs[0]!);
       expect(jsonLogs[0]!.event).toBe("tool.completed");
       expect(jsonLogs[0]!.outcome).toBe("unauthorized");
+    });
+
+    it("writes exactly one JSON log line when the method is not POST", async () => {
+      const env = createMockEnv();
+      const req = new Request("http://localhost/mcp", {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${MCP_BEARER}`,
+          accept: "application/json, text/event-stream",
+        },
+      });
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(405);
+      expect(jsonLogs).toHaveLength(1);
+      assertRequiredFields(jsonLogs[0]!);
+      expect(jsonLogs[0]!.event).toBe("tool.completed");
+      expect(jsonLogs[0]!.outcome).toBe("method_not_allowed");
     });
 
     it("does not include a synthetic PIN in any emitted log line", async () => {
@@ -448,7 +468,7 @@ describe("completion log coverage", () => {
       expect(jsonLogs).toHaveLength(1);
       assertRequiredFields(jsonLogs[0]!);
       expect(jsonLogs[0]!.event).toBe("ops.completed");
-      expect(jsonLogs[0]!.outcome).toBe("invalid_input");
+      expect(jsonLogs[0]!.outcome).toBe("method_not_allowed");
     });
   });
 
@@ -479,6 +499,20 @@ describe("completion log coverage", () => {
       assertRequiredFields(jsonLogs[0]!);
       expect(jsonLogs[0]!.event).toBe("admin.completed");
       expect(jsonLogs[0]!.outcome).toBe("unauthorized");
+    });
+
+    it("POST /admin/requests writes method_not_allowed for wrong method", async () => {
+      const env = createMockEnv();
+      const req = makeAdminRequest("/admin/requests", "POST");
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(405);
+      expect(jsonLogs).toHaveLength(1);
+      assertRequiredFields(jsonLogs[0]!);
+      expect(jsonLogs[0]!.event).toBe("admin.completed");
+      expect(jsonLogs[0]!.outcome).toBe("method_not_allowed");
     });
 
     it("GET /admin/callbacks writes exactly one JSON log line", async () => {

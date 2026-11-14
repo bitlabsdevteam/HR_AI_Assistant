@@ -19,6 +19,7 @@ export type LogOutcome =
   | "changes_paused"
   | "queued"
   | "invalid_input"
+  | "method_not_allowed"
   | "unauthenticated"
   | "unauthorized"
   | "error";

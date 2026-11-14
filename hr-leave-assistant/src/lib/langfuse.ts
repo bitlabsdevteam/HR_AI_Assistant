@@ -226,7 +226,8 @@ function outcomeToLevel(outcome: LogOutcome): "DEFAULT" | "WARNING" | "ERROR" {
     outcome === "not_found" ||
     outcome === "changes_paused" ||
     outcome === "unauthenticated" ||
-    outcome === "unauthorized"
+    outcome === "unauthorized" ||
+    outcome === "method_not_allowed"
   ) {
     return "WARNING";
   }
