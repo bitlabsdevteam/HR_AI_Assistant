@@ -1,0 +1,94 @@
+{
+  "conversation_id": "7761fb66-0b8d-446d-88cc-e3fbdf162248",
+  "created_at": "2026-11-13T22:42:50.654230Z",
+  "version_id": "20261113T224228900441",
+  "flow_transitions": [
+    {
+      "timestamp": "2026-11-13T22:43:01Z",
+      "from": "ai_receptionist",
+      "to": "verify_employee",
+      "kind": "llm",
+      "edge": "ai_receptionist_to_verify_employee"
+    },
+    {
+      "timestamp": "2026-11-13T22:43:21Z",
+      "from": "verify_employee",
+      "to": "hr_manager",
+      "kind": "llm",
+      "edge": "verify_employee_to_hr_manager"
+    },
+    {
+      "timestamp": "2026-11-13T22:44:01Z",
+      "from": "hr_manager",
+      "to": "wrap_up",
+      "kind": "llm",
+      "edge": "hr_manager_to_wrap_up"
+    }
+  ],
+  "expected_manager_node": "hr_manager",
+  "events": [
+    {
+      "index": 6,
+      "timestamp": "2026-11-13T22:43:18.793591Z",
+      "kind": "tool_call",
+      "tool": "verify_employee",
+      "node_from_flow_metadata": "verify_employee"
+    },
+    {
+      "index": 7,
+      "timestamp": "2026-11-13T22:43:21.288226Z",
+      "kind": "tool_result",
+      "tool": "verify_employee",
+      "explicit_ok_true": true,
+      "greeting_only": false,
+      "has_token_field": true,
+      "unauthenticated": false
+    },
+    {
+      "index": 9,
+      "timestamp": "2026-11-13T22:43:22.423109Z",
+      "kind": "tool_call",
+      "tool": "get_leave_balance",
+      "node_from_flow_metadata": "hr_manager"
+    },
+    {
+      "index": 10,
+      "timestamp": "2026-11-13T22:43:26.107483Z",
+      "kind": "tool_result",
+      "tool": "get_leave_balance",
+      "explicit_ok_true": true,
+      "greeting_only": false,
+      "has_token_field": false,
+      "unauthenticated": false
+    },
+    {
+      "index": 13,
+      "timestamp": "2026-11-13T22:43:39.646203Z",
+      "kind": "tool_call",
+      "tool": "transfer",
+      "node_from_flow_metadata": "hr_manager"
+    },
+    {
+      "index": 15,
+      "timestamp": "2026-11-13T22:43:41.912157Z",
+      "kind": "tool_result",
+      "tool": "transfer",
+      "explicit_ok_true": false,
+      "greeting_only": false,
+      "has_token_field": false,
+      "unauthenticated": false
+    }
+  ],
+  "assistant_id": "assistant-00b60205-732a-4cf3-b3c8-78871df94fec",
+  "current_version_at_inspection": "20261113T224621268085",
+  "model": "zai-org/GLM-5.3-Flash",
+  "mcp_servers": [
+    {
+      "id": "01f53071-2e30-4a0c-b90d-4345bc2289ec",
+      "allowed_tools": null,
+      "server_allowed_tools": null
+    }
+  ],
+  "relevant_configuration_matches_call_version": true,
+  "note": "Workflow transitions are from conversation metadata, not inferred from missing transition tools in the message list. This artifact contains no caller speech or tool argument/result bodies."
+}

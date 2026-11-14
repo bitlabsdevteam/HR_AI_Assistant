@@ -1,0 +1,592 @@
+{
+  "captured_on": "2026-11-14",
+  "source": "Read-only Telnyx Edge logs and Conversations API",
+  "conversation": {
+    "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+    "created_at": "2026-11-13T13:36:54.463162Z",
+    "last_message_at": "2026-11-13T13:38:28.782117Z",
+    "metadata_keys": [
+      "to",
+      "from",
+      "call_leg_id",
+      "assistant_id",
+      "called_tools",
+      "call_control_id",
+      "call_session_id",
+      "flow_transitions",
+      "telnyx_agent_target",
+      "assistant_version_id",
+      "telnyx_end_user_target",
+      "telnyx_conversation_channel",
+      "telnyx_end_user_target_verified"
+    ],
+    "assistant_id": "assistant-00b60205-732a-4cf3-b3c8-78871df94fec",
+    "assistant_version_id": "20261113T125228844133",
+    "telnyx_conversation_channel": "phone_call"
+  },
+  "message_count": 31,
+  "messages": [
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:37:27.371005Z",
+      "created_at": "2026-11-13T13:37:49.829905Z",
+      "index": 6,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "verify_employee",
+          "argument_keys": [
+            "employee_number",
+            "pin"
+          ]
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:37:30.854467Z",
+      "created_at": "2026-11-13T13:37:50.251285Z",
+      "index": 7,
+      "text_length": 14,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": true,
+      "tool_body_unauthenticated": false
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:37:31.113115Z",
+      "created_at": "2026-11-13T13:37:50.464075Z",
+      "index": 8,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "get_leave_balance",
+          "argument_keys": [
+            "auth_token"
+          ],
+          "token_type": "str",
+          "token_length": 4,
+          "token_matches_required_format": false,
+          "token_contains_redaction_marker": false,
+          "token_is_literal_placeholder": false,
+          "token_equals_previous_employee_number": true,
+          "token_equals_previous_pin": false
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:37:33.342225Z",
+      "created_at": "2026-11-13T13:37:50.752505Z",
+      "index": 9,
+      "text_length": 55,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": false,
+      "tool_body_unauthenticated": true
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:37:33.562950Z",
+      "created_at": "2026-11-13T13:37:50.971995Z",
+      "index": 10,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "verify_employee",
+          "argument_keys": [
+            "employee_number",
+            "pin"
+          ]
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:37:36.222273Z",
+      "created_at": "2026-11-13T13:37:51.247399Z",
+      "index": 11,
+      "text_length": 14,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": true,
+      "tool_body_unauthenticated": false
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:37:36.283282Z",
+      "created_at": "2026-11-13T13:37:51.481474Z",
+      "index": 12,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "get_leave_balance",
+          "argument_keys": [
+            "auth_token"
+          ],
+          "token_type": "str",
+          "token_length": 4,
+          "token_matches_required_format": false,
+          "token_contains_redaction_marker": false,
+          "token_is_literal_placeholder": false,
+          "token_equals_previous_employee_number": true,
+          "token_equals_previous_pin": false
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:37:38.202601Z",
+      "created_at": "2026-11-13T13:37:51.926514Z",
+      "index": 13,
+      "text_length": 55,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": false,
+      "tool_body_unauthenticated": true
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:37:38.468390Z",
+      "created_at": "2026-11-13T13:37:52.151597Z",
+      "index": 14,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "verify_employee",
+          "argument_keys": [
+            "employee_number",
+            "pin"
+          ]
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:37:40.697648Z",
+      "created_at": "2026-11-13T13:37:52.446448Z",
+      "index": 15,
+      "text_length": 14,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": true,
+      "tool_body_unauthenticated": false
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:37:40.761711Z",
+      "created_at": "2026-11-13T13:37:52.664519Z",
+      "index": 16,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "get_leave_balance",
+          "argument_keys": [
+            "auth_token"
+          ],
+          "token_type": "str",
+          "token_length": 4,
+          "token_matches_required_format": false,
+          "token_contains_redaction_marker": false,
+          "token_is_literal_placeholder": false,
+          "token_equals_previous_employee_number": true,
+          "token_equals_previous_pin": false
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:37:42.740656Z",
+      "created_at": "2026-11-13T13:37:52.960357Z",
+      "index": 17,
+      "text_length": 55,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": false,
+      "tool_body_unauthenticated": true
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:37:42.820167Z",
+      "created_at": "2026-11-13T13:37:53.186814Z",
+      "index": 18,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "get_leave_balance",
+          "argument_keys": [
+            "auth_token"
+          ],
+          "token_type": "str",
+          "token_length": 4,
+          "token_matches_required_format": false,
+          "token_contains_redaction_marker": false,
+          "token_is_literal_placeholder": false,
+          "token_equals_previous_employee_number": true,
+          "token_equals_previous_pin": false
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:37:44.730220Z",
+      "created_at": "2026-11-13T13:37:53.473859Z",
+      "index": 19,
+      "text_length": 55,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": false,
+      "tool_body_unauthenticated": true
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:38:05.320245Z",
+      "created_at": "2026-11-13T13:38:21.575611Z",
+      "index": 23,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "get_leave_balance",
+          "argument_keys": [
+            "auth_token"
+          ],
+          "token_type": "str",
+          "token_length": 4,
+          "token_matches_required_format": false,
+          "token_contains_redaction_marker": false,
+          "token_is_literal_placeholder": false,
+          "token_equals_previous_employee_number": true,
+          "token_equals_previous_pin": false
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:38:07.337732Z",
+      "created_at": "2026-11-13T13:38:21.868133Z",
+      "index": 24,
+      "text_length": 55,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "plain-text",
+      "tool_body_greeting_only": false,
+      "tool_body_unauthenticated": true
+    },
+    {
+      "role": "assistant",
+      "sent_at": "2026-11-13T13:38:28.730515Z",
+      "created_at": "2026-11-13T13:38:29.333787Z",
+      "index": 29,
+      "text_length": 0,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_calls": [
+        {
+          "name": "hangup",
+          "argument_keys": []
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "sent_at": "2026-11-13T13:38:28.782117Z",
+      "created_at": "2026-11-13T13:38:29.620584Z",
+      "index": 30,
+      "text_length": 24,
+      "text_mentions_auth_token": false,
+      "text_has_session_token": false,
+      "tool_message_keys": [
+        "name",
+        "role",
+        "text",
+        "created_at",
+        "sent_at",
+        "ended_at",
+        "tools",
+        "tool_calls",
+        "tool_choice",
+        "tool_call_id",
+        "metadata",
+        "reasoning"
+      ],
+      "tool_body_type": "dict",
+      "tool_body_keys": [
+        "data"
+      ],
+      "tool_body_has_structuredContent": false,
+      "tool_body_unauthenticated": false,
+      "tool_body_greeting_only": false
+    }
+  ],
+  "tool_logs": [
+    {
+      "ts": "2026-11-13T13:37:30.785Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "verify_employee",
+      "outcome": "verified",
+      "status": 200,
+      "duration_ms": 2593,
+      "actor_ms": 609,
+      "emp": "dc52abf5",
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:37:33.276Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "get_leave_balance",
+      "outcome": "unauthenticated",
+      "status": 200,
+      "duration_ms": 1552,
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:37:36.157Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "verify_employee",
+      "outcome": "verified",
+      "status": 200,
+      "duration_ms": 2007,
+      "actor_ms": 594,
+      "emp": "dc52abf5",
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:37:38.133Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "get_leave_balance",
+      "outcome": "unauthenticated",
+      "status": 200,
+      "duration_ms": 1256,
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:37:40.634Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "verify_employee",
+      "outcome": "verified",
+      "status": 200,
+      "duration_ms": 1581,
+      "actor_ms": 310,
+      "emp": "dc52abf5",
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:37:42.600Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "get_leave_balance",
+      "outcome": "unauthenticated",
+      "status": 200,
+      "duration_ms": 1259,
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:37:44.665Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "get_leave_balance",
+      "outcome": "unauthenticated",
+      "status": 200,
+      "duration_ms": 1256,
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:38:07.278Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "37032a37-f039-4dba-9d7d-8b2d4402ea8b",
+      "node": "N10",
+      "tool": "get_leave_balance",
+      "outcome": "unauthenticated",
+      "status": 200,
+      "duration_ms": 1311,
+      "trace": "off"
+    }
+  ],
+  "control_tool_logs": [
+    {
+      "ts": "2026-11-13T13:34:35.442Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "conv_e2e_001",
+      "node": "N10",
+      "tool": "verify_employee",
+      "outcome": "verified",
+      "status": 200,
+      "duration_ms": 1960,
+      "actor_ms": 122,
+      "emp": "dc52abf5",
+      "trace": "off"
+    },
+    {
+      "ts": "2026-11-13T13:34:39.588Z",
+      "event": "tool.completed",
+      "call_ref": "none",
+      "conversation_id": "conv_e2e_001",
+      "node": "N10",
+      "tool": "get_leave_balance",
+      "outcome": "ok",
+      "status": 200,
+      "duration_ms": 3110,
+      "actor_ms": 26,
+      "emp": "dc52abf5",
+      "trace": "off"
+    }
+  ],
+  "privacy": "No caller speech, names, employee numbers, PINs, credentials, or raw tool argument/result bodies retained."
+}
