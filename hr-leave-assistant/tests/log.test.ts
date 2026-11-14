@@ -569,6 +569,30 @@ describe("completion log coverage", () => {
     });
   });
 
+  describe("unknown path", () => {
+    it("writes exactly one JSON log line with outcome not_found and no query string", async () => {
+      const env = createMockEnv();
+      const req = new Request("http://localhost/unknown-path?secret=123");
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(404);
+      expect(jsonLogs).toHaveLength(1);
+      assertRequiredFields(jsonLogs[0]!);
+      expect(jsonLogs[0]!.event).toBe("router.completed");
+      expect(jsonLogs[0]!.outcome).toBe("not_found");
+      expect(jsonLogs[0]!.status).toBe(404);
+      expect(jsonLogs[0]!.call_ref).toBe("none");
+      expect(jsonLogs[0]!.path).toBe("/unknown-path");
+
+      // The query string must not appear anywhere in the log output
+      const allText = logs.join(" ");
+      expect(allText).not.toContain("secret");
+      expect(allText).not.toContain("?");
+    });
+  });
+
   describe("router catch", () => {
     it("writes exactly one JSON log line when a synchronous throw occurs in the router before any handler runs", async () => {
       const env = createMockEnv();

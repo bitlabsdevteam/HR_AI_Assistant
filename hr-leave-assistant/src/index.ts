@@ -58,6 +58,15 @@ export default {
         return handleAdminReset(request, env);
       }
 
+      const notFoundDuration = Date.now() - startedAt;
+      writeCompletionLog({
+        event: "router.completed",
+        call_ref: "none",
+        outcome: "not_found",
+        status: 404,
+        duration_ms: notFoundDuration,
+        path,
+      });
       return errorResponse(new HttpRequestError(404, "not_found"));
     } catch {
       const durationMs = Date.now() - startedAt;

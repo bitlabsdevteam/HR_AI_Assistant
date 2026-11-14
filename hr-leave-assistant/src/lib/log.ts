@@ -57,6 +57,8 @@ export interface CompletionLog {
   kv?: "hit" | "fallback";
   /** What happened to the Langfuse trace export: sent, skipped, failed, or off. */
   trace?: "sent" | "skipped" | "failed" | "off";
+  /** Request path, for router events that hit an unknown route. Query string is excluded. */
+  path?: string;
   /** Additional detail for debugging (e.g. "invalid_payload", "kv_fallback"). */
   detail?:
     | "invalid_payload"
