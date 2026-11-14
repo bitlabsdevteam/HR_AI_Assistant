@@ -30,7 +30,6 @@ function createEnv(summary = vi.fn(async () => ({
   const env = {
     SECRETS: { get: async (name: string) => (name === "HASH_KEY" ? HASH_KEY : undefined) },
     HR_KV: { get: async () => null, put: async () => {}, delete: async () => {} },
-    HR_POLICY_BUCKET: { get: async () => null },
     EMPLOYEE_LEAVE: {
       idFromName: () => ({
         verifyPin: async () => ({ status: "ok" as const, firstName: "Alex" }),

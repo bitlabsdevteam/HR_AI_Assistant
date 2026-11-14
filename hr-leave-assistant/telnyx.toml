@@ -17,10 +17,6 @@ type = "CallerProfile"
 [storage.kv.HR_KV]
 id = "1b0b0a50-c921-498d-9916-ec3f085da147"
 
-[storage.cloudstorage.HR_POLICY_BUCKET]
-bucket_name = "hr-policy"
-region = "us-central-1"
-
 [[secrets]]
 binding = "MCP_BEARER"
 name = "HRLEAVE_MCP_BEARER"

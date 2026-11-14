@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleVerifyEmployee } from "../src/tools";
 import type { AppEnv, EmployeeLeaveStub, HrDeskStub } from "../src/env";
-import type { CloudStorageBucket } from "@telnyx/edge-runtime";
 
 const HASH_KEY = "test-hash-key-for-tools-secret";
 
@@ -111,15 +110,7 @@ async function createMockEnv(options: {
         ping: async () => "ok" as const,
       }),
     },
-    HR_POLICY_BUCKET: {
-      get: async () => null,
-      put: async () => null,
-      head: async () => null,
-      delete: async () => {},
-      list: async () => ({ objects: [], delimitedPrefixes: [], truncated: false }),
-      createMultipartUpload: async () => ({ key: "", uploadId: "", uploadPart: async () => ({ partNumber: 1, etag: "" }), complete: async () => ({ key: "", writeHttpMetadata: () => {} }), abort: async () => {} }),
-      resumeMultipartUpload: () => ({ key: "", uploadId: "", uploadPart: async () => ({ partNumber: 1, etag: "" }), complete: async () => ({ key: "", writeHttpMetadata: () => {} }), abort: async () => {} }),
-    } as CloudStorageBucket,
+
   } as AppEnv;
 }
 

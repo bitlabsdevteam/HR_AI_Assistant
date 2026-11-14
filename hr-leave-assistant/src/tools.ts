@@ -10,7 +10,7 @@ import type { AppEnv } from "./env";
 import { createSessionToken, verifySessionToken } from "./lib/auth";
 import { loadCompanyContext, loadCompanyProfile } from "./lib/kv";
 import { employeeActorName, employeePseudonym, leaveRequestKey, newReference, pinHash, callbackRequestKey } from "./lib/identity";
-import { resolvePolicyAnswer } from "./lib/bucket-policy";
+
 import type { CompletionLog } from "./lib/log";
 
 /** Zod schema for get_leave_policy tool input. */
@@ -221,13 +221,11 @@ export function createHrLeaveMcpServer(env: AppEnv, observation: McpObservation,
         const { profile, kv } = await loadCompanyProfile(env);
         observation.kv = kv;
         const typedTopic = topic as PolicyTopic;
-        const { answer, source, error } = await resolvePolicyAnswer(env.HR_POLICY_BUCKET, profile, typedTopic);
-        if (error) {
-          observation.detail = error;
-        } else if (kv === "error") {
+        const answer = policyAnswer(profile, typedTopic);
+        const source = kv === "hit" ? "kv" : "fallback";
+        if (kv === "error") {
           observation.detail = "kv_error";
         }
-        observation.kv = source === "bucket" ? "hit" : kv;
         return toolSuccess(answer, { topic: typedTopic, answer, source });
       } catch {
         return toolError(

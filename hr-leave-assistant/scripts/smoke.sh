@@ -42,8 +42,17 @@ RESULT=$(curl -s -X POST "${BASE}/mcp" \
   -H "Authorization: Bearer ${MCP_BEARER}" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_leave_policy","arguments":{"topic":"entitlement"},"_meta":{"telnyx_conversation_id":"conv_test_001"}}}' | head -c 500)
-echo "$RESULT"
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_leave_policy","arguments":{"topic":"entitlement"},"_meta":{"telnyx_conversation_id":"conv_test_001"}}}')
+echo "$RESULT" | head -c 500
+
+SOURCE=$(echo "$RESULT" | grep -o '"source":"[^"]*"' | head -1 | cut -d'"' -f4)
+if [ "$SOURCE" = "kv" ] || [ "$SOURCE" = "fallback" ]; then
+  echo ""
+  echo "get_leave_policy source=$SOURCE: ✅"
+else
+  echo ""
+  echo "get_leave_policy source=${SOURCE:-unknown}: ❌ expected kv or fallback"
+fi
 
 echo ""
 echo "=== Admin reset with bearer ==="
