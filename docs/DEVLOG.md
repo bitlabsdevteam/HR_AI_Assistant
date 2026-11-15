@@ -331,3 +331,27 @@ Corrections to my first diagram: (1) N80 speaks the `reference` returned by `app
 - On a normal call neither variable edge fires. GRADING_MAP "Creative dynamic webhook variables" is met only with one of these two runs captured in the logs.
 
 - **Fixed**: none yet. Review line: reviewed c517ee6 (webhook.ts and TDD §5, §6); findings raised 2; fixed 0.
+
+## 2026-11-14 — ship: re-deploy existing codebase from clean working tree
+
+- **Model ID**: telnyx/moonshotai/Kimi-K2.6
+- **Wiki consulted**: none (no platform feature touched; local compilation and ship only)
+- **What was done**:
+  1. Ran `npm run typecheck` — passed, no errors.
+  2. Ran `npm test` — 106 tests passed in 12 files.
+  3. Ran `telnyx-edge ship` — build succeeded, revision `db1e1073382a` created.
+  4. `telnyx-edge ship status` reports "The function's latest build succeeded."
+  5. `telnyx-edge deployments` shows new revision `db1e1073382a` with `deploy_status: "pending"`; prior revision `3b72605631fd` remains `active: true`.
+  6. Smoke test (`scripts/smoke.sh`) against active deployment passed: health 200, MCP 401 without bearer, ops 401 without bearer, `tools/list` returns 7 tools, `get_leave_policy` returns KV-sourced answer, admin reset 200, admin requests shows four demo employees.
+- **What went wrong / what is open**:
+  - New revision is still `pending` 5+ minutes after ship. This is normal for Telnyx Edge; the prior revision remains active and functional. Will monitor.
+  - No code changes in this session — the repo was clean before ship. The ship re-bundles the current committed state.
+- **Slice outcome**: local green; deployment pending; smoke green against active revision.
+
+## 2026-11-15 — review: webhook and dynamic variables, second pass (Claude Code, documents only)
+
+- **Reviewed**: `src/webhook.ts`, `src/lib/signature.ts`, `src/lib/langfuse.ts` at 2364ed1; TDD §5; proposed `docs/KV_design.md`. Advisor consulted. No code changed, nothing run, nothing deployed.
+- **Wiki relied on**: `Telynyx/wiki/entities/dynamic-webhook-variables.md`, `Telynyx/wiki/telnyx/assistants/assistants-dynamic-variables.md` (`evidence: stated`).
+- **Verdict**: design is sound. Still open from 2026-11-14: `degradedVariablesResponse` returns `leave_changes_enabled: "true"` (`webhook.ts:295`). New: the 2,000 ms internal deadline exceeds the 1,500 ms Telnyx default, and is BLOCKING until the assistant readback shows `dynamic_variables_webhook_timeout_ms` = 3000, because at the default the log says `ready` while the caller got the assistant defaults (C-5, unverified); the Langfuse export runs before the response but is capped at 300 ms (non-blocking); log field `kv` takes `hit|missing|error` but TDD §5 and §10 say `fallback` (contract mismatch). Proposed: promote `is_open_now` from Should to Must with a two-branch variable edge (`"true"` to transfer or HR, `"false"` to callback) so one variable edge fires on every call; add `recent_caller` (Stretch, per KV_design). `hr_desk_status` considered and dropped: `HrDesk` actor state is per employee number or a desk-wide counter, not a pre-sign-in caller fact. Routing column is per TDD §6; the live workflow readback (nodes `verify_employee`, `hr_manager`) was not checked for variable edges.
+- **Review line**: reviewed 2364ed1 (webhook, signature, langfuse); findings raised 3 new + 1 carried; fixed 0.
+- **Addendum, same review (independent read-only subagent, 2026-11-15)**: confirmed at `kv.ts:56-59`, `webhook.ts:120` and `tools.ts:312` that a KV error returns `leave_changes_enabled: true` with `context_status: "ready"`, so the pause flag fails open on both the webhook and the tool path (TDD §5 specifies this fail-open, so it is not a code deviation: a design question for David, whether the pause should fail closed, and a doc fix, since TDD's "the actors still guard every change" is false for the pause flag). Also confirmed `langfuse.ts:89-91`: the documented initialization payload has no `telnyx_conversation_id`, so the webhook span is skipped and the `ready` log line cannot be joined to a conversation. OpenCode-facing items from this addendum: 1 (the join-key gap). Fixed 0.
