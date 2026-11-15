@@ -164,23 +164,9 @@ describe("admin routes iterate SQL roster", () => {
       allResult: [
         {
           employee_number: "1001",
-          first_name: "Alex",
-          entitlement_days: 14,
-          opening_used_days: 6,
-          pin_hash: "deadbeef00000000000000000000000000000000000000000000000000000000",
-          secret_question: null,
-          secret_answer_hash: null,
-          active: 1,
         },
         {
           employee_number: "1002",
-          first_name: "Priya",
-          entitlement_days: 14,
-          opening_used_days: 12,
-          pin_hash: "cafebabe00000000000000000000000000000000000000000000000000000000",
-          secret_question: "What city were you born in?",
-          secret_answer_hash: "beefdead00000000000000000000000000000000000000000000000000000000",
-          active: 1,
         },
       ],
     });
@@ -196,13 +182,6 @@ describe("admin routes iterate SQL roster", () => {
       allResult: [
         {
           employee_number: "1001",
-          first_name: "Alex",
-          entitlement_days: 14,
-          opening_used_days: 6,
-          pin_hash: "deadbeef00000000000000000000000000000000000000000000000000000000",
-          secret_question: null,
-          secret_answer_hash: null,
-          active: 1,
         },
       ],
     });

@@ -70,7 +70,6 @@ describe("findEmployee", () => {
       employee_number: "1001",
       first_name: "Alex",
       entitlement_days: 14,
-      opening_used_days: 6,
       pin_hash: "deadbeef",
       secret_question: "What is your favourite colour?",
       secret_answer_hash: "cafebabe",
@@ -85,7 +84,6 @@ describe("findEmployee", () => {
       expect(result.employee.employeeNumber).toBe("1001");
       expect(result.employee.firstName).toBe("Alex");
       expect(result.employee.entitlementDays).toBe(14);
-      expect(result.employee.openingUsedDays).toBe(6);
       expect(result.employee.pinHash).toBe("deadbeef");
       expect(result.employee.secretQuestion).toBe("What is your favourite colour?");
       expect(result.employee.secretAnswerHash).toBe("cafebabe");
@@ -106,7 +104,6 @@ describe("findEmployee", () => {
       employee_number: "1001",
       first_name: "Alex",
       entitlement_days: 14,
-      opening_used_days: 6,
       pin_hash: "deadbeef",
       secret_question: null,
       secret_answer_hash: null,

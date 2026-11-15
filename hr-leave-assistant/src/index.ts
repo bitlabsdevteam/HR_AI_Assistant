@@ -7,7 +7,7 @@ import { hasValidBearer } from "./lib/auth";
 import { loadCompanyContext } from "./lib/kv";
 import { DEFAULT_EMPLOYEES } from "./config/default-employees";
 import { employeeActorName, pinHash, answerHash } from "./lib/identity";
-import { findEmployee, listActiveEmployeeNumbers, listActiveEmployees } from "./lib/roster";
+import { findEmployee, listActiveEmployeeNumbers } from "./lib/roster";
 import { writeCompletionLog, type LogOutcome } from "./lib/log";
 import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 
@@ -514,7 +514,7 @@ async function handleAdminReset(request: Request, env: AppEnv): Promise<Response
       return jsonResponse({ error: { code: "unavailable", message: "HASH_KEY is not configured." } }, 500);
     }
 
-    const roster = await listActiveEmployees(env);
+    const roster = await listActiveEmployeeNumbers(env);
     if (roster.state === "error") {
       status = 500;
       outcome = "error";
@@ -522,15 +522,18 @@ async function handleAdminReset(request: Request, env: AppEnv): Promise<Response
     }
 
     await Promise.all([
-      ...roster.employees.map(async (emp) => {
-        const actorName = await employeeActorName(hashKey, emp.employeeNumber);
+      ...roster.numbers.map(async (num) => {
+        const actorName = await employeeActorName(hashKey, num);
+        const seed = DEFAULT_EMPLOYEES.find((e) => e.employeeNumber === num);
         return env.EMPLOYEE_LEAVE.idFromName(actorName).reset({
-          firstName: emp.firstName,
-          entitlementDays: emp.entitlementDays,
-          openingUsedDays: emp.openingUsedDays,
-          pinHash: emp.pinHash,
-          secretQuestion: emp.secretQuestion,
-          secretAnswerHash: emp.secretAnswerHash,
+          firstName: seed?.firstName ?? "Unknown",
+          entitlementDays: seed?.entitlementDays ?? 14,
+          openingUsedDays: seed?.openingUsedDays ?? 0,
+          pinHash: seed ? await pinHash(hashKey, num, seed.pin) : await pinHash(hashKey, num, "0000"),
+          secretQuestion: seed?.secretQuestion ?? null,
+          secretAnswerHash: seed && seed.secretAnswer
+            ? await answerHash(hashKey, num, seed.secretAnswer)
+            : null,
         });
       }),
       env.HR_DESK.idFromName("cedar").reset(),
@@ -616,12 +619,11 @@ async function handleAdminSeedEmployees(request: Request, env: AppEnv): Promise<
           : null;
         return db
           .prepare(
-            `INSERT INTO Employee (employee_number, first_name, entitlement_days, opening_used_days, pin_hash, secret_question, secret_answer_hash, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            `INSERT INTO Employee (employee_number, first_name, entitlement_days, pin_hash, secret_question, secret_answer_hash, active)
+             VALUES (?, ?, ?, ?, ?, ?, 1)
              ON CONFLICT(employee_number) DO UPDATE SET
                first_name = excluded.first_name,
                entitlement_days = excluded.entitlement_days,
-               opening_used_days = excluded.opening_used_days,
                pin_hash = excluded.pin_hash,
                secret_question = excluded.secret_question,
                secret_answer_hash = excluded.secret_answer_hash,
@@ -631,7 +633,6 @@ async function handleAdminSeedEmployees(request: Request, env: AppEnv): Promise<
             emp.employeeNumber,
             emp.firstName,
             emp.entitlementDays,
-            emp.openingUsedDays,
             pinHashValue,
             emp.secretQuestion,
             secretAnswerHash,

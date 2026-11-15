@@ -11,7 +11,6 @@ const employeeRowSchema = z.object({
   employee_number: z.string().min(1),
   first_name: z.string().min(1),
   entitlement_days: z.number().int().min(0),
-  opening_used_days: z.number().int().min(0),
   pin_hash: z.string().min(1),
   secret_question: z.string().nullable(),
   secret_answer_hash: z.string().nullable(),
@@ -23,7 +22,6 @@ export interface RosterEmployee {
   employeeNumber: string;
   firstName: string;
   entitlementDays: number;
-  openingUsedDays: number;
   pinHash: string;
   secretQuestion: string | null;
   secretAnswerHash: string | null;
@@ -55,7 +53,7 @@ export async function findEmployee(
     const row = await withDeadline(
       db
         .prepare(
-          "SELECT employee_number, first_name, entitlement_days, opening_used_days, pin_hash, secret_question, secret_answer_hash, active FROM Employee WHERE employee_number = ?",
+          "SELECT employee_number, first_name, entitlement_days, pin_hash, secret_question, secret_answer_hash, active FROM Employee WHERE employee_number = ?",
         )
         .bind(employeeNumber)
         .first<Record<string, unknown>>(),
@@ -82,7 +80,6 @@ export async function findEmployee(
         employeeNumber: data.employee_number,
         firstName: data.first_name,
         entitlementDays: data.entitlement_days,
-        openingUsedDays: data.opening_used_days,
         pinHash: data.pin_hash,
         secretQuestion: data.secret_question,
         secretAnswerHash: data.secret_answer_hash,
@@ -142,7 +139,7 @@ export async function listActiveEmployees(
     const { results } = await withDeadline(
       db
         .prepare(
-          "SELECT employee_number, first_name, entitlement_days, opening_used_days, pin_hash, secret_question, secret_answer_hash, active FROM Employee WHERE active = 1",
+          "SELECT employee_number, first_name, entitlement_days, pin_hash, secret_question, secret_answer_hash, active FROM Employee WHERE active = 1",
         )
         .all<Record<string, unknown>>(),
       ROSTER_DEADLINE_MS,
@@ -157,7 +154,6 @@ export async function listActiveEmployees(
           employeeNumber: data.employee_number,
           firstName: data.first_name,
           entitlementDays: data.entitlement_days,
-          openingUsedDays: data.opening_used_days,
           pinHash: data.pin_hash,
           secretQuestion: data.secret_question,
           secretAnswerHash: data.secret_answer_hash,

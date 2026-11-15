@@ -19,7 +19,6 @@ function createEnv(summary = vi.fn(async () => ({
       employee_number: "1001",
       first_name: "Alex",
       entitlement_days: 14,
-      opening_used_days: 6,
       pin_hash: "deadbeef00000000000000000000000000000000000000000000000000000000",
       secret_question: null,
       secret_answer_hash: null,

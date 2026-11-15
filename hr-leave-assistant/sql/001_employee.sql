@@ -2,7 +2,6 @@ CREATE TABLE IF NOT EXISTS Employee (
   employee_number    TEXT PRIMARY KEY,
   first_name         TEXT NOT NULL,
   entitlement_days   INTEGER NOT NULL DEFAULT 14,
-  opening_used_days  INTEGER NOT NULL DEFAULT 0,
   pin_hash           TEXT NOT NULL,
   secret_question    TEXT,
   secret_answer_hash TEXT,
