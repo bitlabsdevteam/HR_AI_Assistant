@@ -187,7 +187,7 @@ export async function handleVerifyEmployee(
       env.EMPLOYEE_LEAVE.idFromName(actorName).ensureProfile({
         firstName: employee.firstName,
         entitlementDays: employee.entitlementDays,
-        openingUsedDays: employee.openingUsedDays,
+        openingUsedDays: 0,
         pinHash: employee.pinHash,
         secretQuestion: employee.secretQuestion,
         secretAnswerHash: employee.secretAnswerHash,

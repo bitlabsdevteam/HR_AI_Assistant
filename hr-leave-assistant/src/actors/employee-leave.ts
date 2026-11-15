@@ -506,9 +506,10 @@ export class EmployeeLeave extends StatefulActor {
     const existing = await this.ctx.storage.get<EmployeeProfile>("profile");
 
     if (existing) {
+      // Refresh identity fields from the roster, but never touch openingUsedDays,
+      // failedAttempts, lockedUntil, requests, or counters.
       existing.firstName = seed.firstName;
       existing.entitlementDays = seed.entitlementDays;
-      existing.openingUsedDays = seed.openingUsedDays;
       existing.pinHash = seed.pinHash;
       existing.secretQuestion = seed.secretQuestion ?? null;
       existing.secretAnswerHash = seed.secretAnswerHash ?? null;
