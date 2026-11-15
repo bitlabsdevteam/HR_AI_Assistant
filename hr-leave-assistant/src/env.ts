@@ -30,6 +30,25 @@ export interface KvNamespaceBinding {
   delete(key: string): Promise<void>;
 }
 
+/** Minimal interface for SQL database operations as used by this project. */
+export interface SqlDatabaseBinding {
+  prepare(query: string): SqlPreparedStatement;
+  batch<T>(statements: SqlPreparedStatement[]): Promise<SqlQueryResult<T>[]>;
+}
+
+/** A prepared SQL statement with bound parameters. */
+export interface SqlPreparedStatement {
+  bind(...values: unknown[]): SqlPreparedStatement;
+  first<T>(): Promise<T | null>;
+  all<T>(): Promise<SqlQueryResult<T>>;
+  run<T>(): Promise<SqlQueryResult<T>>;
+}
+
+/** Result of a SQL query. */
+export interface SqlQueryResult<T> {
+  results: T[];
+}
+
 /** Generic interface for actor namespace bindings. */
 export interface ActorNamespace<Stub> {
   /** Returns the stub for the single actor instance with this name, creating it on first use. */
@@ -51,6 +70,7 @@ export type EmployeeLeaveStub = Pick<
   | "verifyPin"
   | "verifySecretAnswer"
   | "setSecretQuestion"
+  | "ensureProfile"
   | "summary"
   | "check"
   | "apply"
@@ -76,8 +96,26 @@ export type HrDeskStub = Pick<
  */
 export interface AppEnv {
   HR_KV: KvNamespaceBinding;
+  TERADB?: SqlDatabaseBinding;
   EMPLOYEE_LEAVE: ActorNamespace<EmployeeLeaveStub>;
   HR_DESK: ActorNamespace<HrDeskStub>;
   CALLER_PROFILE: ActorNamespace<CallerProfileStub>;
   SECRETS: SecretsBinding;
+}
+
+/**
+ * Resolves the SQL database binding at runtime.
+ * The Telnyx runtime may place SQL bindings on the imported `env` rather than
+ * the `fetch` argument; this helper tries both and records which one worked.
+ */
+export function resolveTeradb(env: AppEnv): SqlDatabaseBinding | undefined {
+  if (env.TERADB) {
+    return env.TERADB;
+  }
+  // The wiki warns that SQL bindings may only be present on imported env.
+  // Runtime observation wins; this is verified at deploy time in /ops/check.
+  const imported = typeof globalThis !== "undefined"
+    ? (globalThis as unknown as { env?: { TERADB?: SqlDatabaseBinding } }).env
+    : undefined;
+  return imported?.TERADB;
 }

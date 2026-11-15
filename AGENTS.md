@@ -36,6 +36,7 @@ Single-context layout. See `docs/agents/domain.md`.
 | Touch workflow nodes, edges, or instructions | TDD §6 |
 | Touch MCP tools, the session token, or the `/mcp` route | TDD §7, then `docs/MCP_SERVER_SPEC.md` (its deltas D1 and D2 win over the TDD) |
 | Touch an actor, KV, or leave rules | TDD §8 |
+| Touch the SQL roster, `findEmployee`, or any admin/ops route that iterates employees | TDD §3.1, §7, §8, then `Telynyx/wiki/telnyx/edge-compute-data/edge-compute-data-sqldb-runtime-api.md` |
 | Handle a PIN, a token, or an employee number | TDD §7.1 and §9 |
 | Log anything | TDD §10.1 |
 | Trace, export, or send anything to Langfuse | TDD §10.5 and §9 item 9 |
@@ -115,7 +116,10 @@ When something breaks in a way that takes more than a few minutes to find, creat
 - **PINs are guarded.** Store only the HMAC. Compare in constant time. Answer an unknown employee number exactly as a wrong PIN: same code, same wording, same `attempts_left` countdown, same lock (`HrDesk.failUnknown` keeps the count for numbers that are not on the roster). Three failures lock the employee for 15 minutes. Never speak, log, or return a PIN.
 - **Fail closed on auth.** A missing secret means `401`, on `/mcp`, `/ops`, and `/admin` alike.
 - **Policy comes from KV.** `get_leave_policy` reads the structured profile from KV (bundled default on a miss). It never reads from Cloud Storage. Open-ended policy questions are handled by the platform `retrieval` tool over the embedded `hr-policy` bucket, configured in the assistant workflow.
-- **Domain code is pure.** `src/domain/` imports nothing from `@telnyx/edge-runtime`; time comes in as an argument.
+ - **Domain code is pure.** `src/domain/` imports nothing from `@telnyx/edge-runtime`; time comes in as an argument.
+ - **Roster is the credential source of truth.** `teradb.Employee` holds who exists, their entitlement, `pin_hash`, `secret_answer_hash`, and whether they are active. The actor receives this identity at sign-in and refreshes its own profile from it.
+ - **SQL failure never falls back to bundled PINs.** If `findEmployee` returns `error`, the tool returns `unavailable`. It never reads `DEFAULT_EMPLOYEES` at runtime.
+ - **Parameterized queries only.** Every SQL value is passed through `.bind()`. No string-built SQL.
 
 ## What the graders score
 

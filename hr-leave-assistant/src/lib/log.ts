@@ -55,6 +55,8 @@ export interface CompletionLog {
   actor_ms?: number;
   /** Whether KV read was a hit, missing, or errored. */
   kv?: "hit" | "missing" | "error";
+  /** Whether the roster read was a hit, missing, or errored. */
+  roster?: "hit" | "missing" | "error";
   /** Whether the caller had a recent session in KV: hit, missing, error, or skipped. */
   session?: "hit" | "missing" | "error" | "skipped";
   /** What happened to the Langfuse trace export: sent, skipped, failed, or off. */

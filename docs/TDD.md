@@ -27,7 +27,7 @@ An English phone assistant for the HR desk of a fictional company, Cedar Group. 
 | Coding agent (builder) | OpenCode + `@telnyx/opencode` on a Telnyx-hosted model | Writes all solution code. Challenge requirement 6. See §14.2. |
 | Review agent | Claude Code | Reviews each slice; writes no solution code. See §14.2. |
 
-No database, queue, external collector, HR system, or frontend.
+One SQL database for the employee roster; no queue, external collector, HR system, or frontend.
 
 ## 3. Architecture
 
@@ -73,8 +73,9 @@ Two separate paths share one `call_ref`. Path 1 runs once at call start: the web
 | Leave balance, leave requests, the overlap check | `EmployeeLeave` actor | "Is there enough balance and no overlap? Then reserve it" must be one serialized step for one employee. The entity is the employee, so one instance per employee. Two simultaneous requests for the same employee cannot both spend the last days. [S09, S10] |
 | Outcome counters for leave and verification | `EmployeeLeave` actor | They change in the same turn as the outcome they count, so they are exact and survive restarts. `/admin/stats` adds them up across the roster. |
 | Callback requests; PIN-attempt count and lock for numbers that are not on the roster | `HrDesk` actor | One desk-level entity. A callback is not tied to a verified employee, and an unknown number must lock after three tries exactly as a real one does, or the lockout would reveal which numbers exist. |
+| Employee roster (identity, entitlement, PIN hash, secret-question hash, active flag) | SQL database (`teradb.Employee`) | The roster must be readable and editable across all employees by someone other than the phone assistant, while balances and lockout stay in the per-employee actor for safe read-modify-write. |
 
-Deliberately not in an actor: the policy profile and the flag (no read-modify-write). Deliberately not in KV: anything that decides whether a balance suffices, whether leave overlaps, or whether a PIN attempt is allowed.
+Deliberately not in an actor: the policy profile and the flag (no read-modify-write). Deliberately not in KV: anything that decides whether a balance suffices, whether leave overlaps, or whether a PIN attempt is allowed. The roster is in SQL, not an actor, because it is read-heavy, edited by operators, and does not involve a read-modify-write on a per-employee basis (the actor handles that).
 
 ### 3.2 The challenge's reference architecture
 

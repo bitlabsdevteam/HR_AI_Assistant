@@ -75,17 +75,20 @@ telnyx-edge storage kv key get 1b0b0a50-c921-498d-9916-ec3f085da147 session/call
 
 ## 2. SQL Database (Edge Compute)
 
-> Not used by this project, but available on the platform.
+Database: `teradb`, ID `34d8ea59-4311-4c50-b70f-77e50d9a4ea6`
 
 ```bash
 # Create a SQL database
 telnyx-edge storage sqldb create --name my-db
 
-# Run a remote query
-telnyx-edge storage sqldb execute my-db --remote --command "SELECT 1"
+# Run a remote query on teradb
+telnyx-edge storage sqldb execute teradb --remote --command "SELECT COUNT(*) AS n FROM Employee"
+
+# Read one employee row
+telnyx-edge storage sqldb execute teradb --remote --command "SELECT * FROM Employee WHERE employee_number = '1001'"
 
 # Export schema + data
-telnyx-edge storage sqldb export my-db --remote --output ./database.sql
+telnyx-edge storage sqldb export teradb --remote --output ./database.sql
 
 # List tables / inspect
 telnyx-edge storage sqldb list
@@ -252,6 +255,10 @@ curl -s "${BASE}/ops/check" \
 Requires bearer `OPS_TOKEN`.
 
 ```bash
+# Seed SQL roster from bundled demo data
+curl -s -X POST "${BASE}/admin/seed-employees" \
+  -H "Authorization: Bearer ${OPS_TOKEN}"
+
 # Reset all demo data (employee balances, callbacks, counters)
 curl -s -X POST "${BASE}/admin/reset" \
   -H "Authorization: Bearer ${OPS_TOKEN}"
@@ -344,14 +351,15 @@ Validates: health check, MCP 401 without bearer, ops 401 without bearer, MCP too
 
 ## 12. Employee Data: Where It Lives & How to Query It
 
-### 12.1 Two storage layers
+### 12.1 Three storage layers
 
 | Layer | Where | What it holds |
 |-------|-------|---------------|
-| **Static roster** | `src/config/default-employees.ts` (bundled) | 4 demo employees: number, name, entitlement, opening used days, demo PIN, secret question/answer |
-| **`EmployeeLeave` actor** | `this.ctx.storage` (durable, one instance per employee) | PIN hash, balance, leave requests, attempt counters, lockout state |
+| **SQL roster** | `teradb.Employee` | Active employees: number, name, entitlement, opening used days, PIN hash, secret question/answer hash, active flag. Operator-editable without deploy. |
+| **`EmployeeLeave` actor** | `this.ctx.storage` (durable, one instance per employee) | PIN hash (synced from SQL), balance, leave requests, attempt counters, lockout state. The runtime source of truth for balances and lockouts. |
+| **Static seed data** | `src/config/default-employees.ts` (bundled) | 4 demo employees with plaintext PINs. Used only by `/admin/seed-employees` to populate SQL; never read at runtime. |
 
-The actor is the **runtime source of truth** for balances, leave requests, and PIN lockouts. The static file is only used at `/admin/reset` to re-seed the demo state.
+The SQL roster is the **credential source of truth** (who exists, their hashes, active status). The actor refreshes its profile from SQL at sign-in. `/admin/reset` resets actors from the SQL roster, not from the static file.
 
 ### 12.2 Actor storage keys per employee
 
@@ -399,16 +407,25 @@ telnyx-edge actors logs EmployeeLeave --tail
 telnyx-edge actors instances EmployeeLeave
 ```
 
-### 12.6 Reset all demo data
+### 12.6 Seed SQL roster from bundled data
+
+```bash
+curl -s -X POST "${BASE}/admin/seed-employees" \
+  -H "Authorization: Bearer ${OPS_TOKEN}"
+```
+
+Idempotent: upserts the 4 demo employees into `teradb.Employee`, computing hashes from the secret `HASH_KEY`.
+
+### 12.7 Reset all actor demo data
 
 ```bash
 curl -s -X POST "${BASE}/admin/reset" \
   -H "Authorization: Bearer ${OPS_TOKEN}"
 ```
 
-Re-seeds all 4 employees from the bundled config, clears all leave requests, resets balances to opening values, and zeroes lockouts/counters.
+Resets every active employee's actor from the SQL roster, clears all leave requests, resets balances to opening values, and zeroes lockouts/counters.
 
-### 12.7 Demo employee PINs
+### 12.8 Demo employee PINs
 
 | Number | Name | PIN |
 |--------|------|-----|
@@ -417,7 +434,7 @@ Re-seeds all 4 employees from the bundled config, clears all leave requests, res
 | 1003 | Sam Okafor | 3333 |
 | 1004 | Jordan Lee | 4444 |
 
-> **Security:** PINs are stored as HMAC-SHA-256 hashes inside the actor, never as plaintext. The static file is synthetic demo data only.
+> **Security:** PINs are stored as HMAC-SHA-256 hashes in SQL and inside the actor, never as plaintext. The static file is synthetic demo data only.
 
 ---
 
@@ -426,6 +443,7 @@ Re-seeds all 4 employees from the bundled config, clears all leave requests, res
 | Resource | ID / Name |
 |----------|-----------|
 | KV Namespace | `1b0b0a50-c921-498d-9916-ec3f085da147` |
+| SQL Database | `teradb` (`34d8ea59-4311-4c50-b70f-77e50d9a4ea6`) |
 | Function | `hr-leave-assistant` |
 | Function ID | `903aedd3-9771-4f31-ad51-2d4160cd7127` |
 | Actor types | `EmployeeLeave`, `HrDesk`, `CallerProfile` |

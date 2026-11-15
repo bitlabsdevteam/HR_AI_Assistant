@@ -52,6 +52,7 @@ function createMockEnv(kvGet: (key: string) => Promise<unknown>): AppEnv {
           }),
           reset: async () => "ok" as const,
           ping: async () => "ok" as const,
+          ensureProfile: async () => "ok" as const,
         } as ReturnType<AppEnv["EMPLOYEE_LEAVE"]["idFromName"]>),
     },
     HR_DESK: {

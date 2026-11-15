@@ -17,6 +17,9 @@ type = "CallerProfile"
 [storage.kv.HR_KV]
 id = "1b0b0a50-c921-498d-9916-ec3f085da147"
 
+[storage.sqldb.TERADB]
+id = "34d8ea59-4311-4c50-b70f-77e50d9a4ea6"
+
 [[secrets]]
 binding = "MCP_BEARER"
 name = "HRLEAVE_MCP_BEARER"

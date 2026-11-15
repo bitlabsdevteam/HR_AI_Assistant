@@ -1,4 +1,5 @@
 import type { AppEnv } from "./env";
+import { resolveTeradb } from "./env";
 import { errorResponse, HttpRequestError, jsonResponse } from "./lib/http";
 import { handleMcp } from "./mcp";
 import { handleDynamicVariables } from "./webhook";
@@ -6,6 +7,7 @@ import { hasValidBearer } from "./lib/auth";
 import { loadCompanyContext } from "./lib/kv";
 import { DEFAULT_EMPLOYEES } from "./config/default-employees";
 import { employeeActorName, pinHash, answerHash } from "./lib/identity";
+import { findEmployee, listActiveEmployeeNumbers, listActiveEmployees } from "./lib/roster";
 import { writeCompletionLog, type LogOutcome } from "./lib/log";
 import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 
@@ -58,6 +60,10 @@ export default {
         return handleAdminReset(request, env);
       }
 
+      if (path === "/admin/seed-employees") {
+        return handleAdminSeedEmployees(request, env);
+      }
+
       const notFoundDuration = Date.now() - startedAt;
       writeCompletionLog({
         event: "router.completed",
@@ -102,7 +108,7 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
   const startedAt = Date.now();
   let status = 200;
   let outcome: LogOutcome = "ok";
-  const dependencies: Record<string, { ok: boolean; ms: number }> = {};
+  const dependencies: Record<string, { ok: boolean; ms: number; reason?: string }> = {};
 
   try {
     if (request.method !== "GET") {
@@ -122,6 +128,20 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
       dependencies.kv = { ok: true, ms: Date.now() - kvStarted };
     } catch {
       dependencies.kv = { ok: false, ms: Date.now() - kvStarted };
+    }
+
+    // SQL check
+    const sqlStarted = Date.now();
+    try {
+      const db = resolveTeradb(env);
+      if (db) {
+        await db.prepare("SELECT 1").first();
+        dependencies.sql = { ok: true, ms: Date.now() - sqlStarted };
+      } else {
+        dependencies.sql = { ok: false, ms: Date.now() - sqlStarted };
+      }
+    } catch {
+      dependencies.sql = { ok: false, ms: Date.now() - sqlStarted };
     }
 
     // HrDesk ping
@@ -146,12 +166,16 @@ async function handleOpsCheck(request: Request, env: AppEnv): Promise<Response> 
     const empStarted = Date.now();
     try {
       const hashKey = await env.SECRETS.get("HASH_KEY");
-      if (hashKey && DEFAULT_EMPLOYEES.length > 0) {
-        const firstEmployee = DEFAULT_EMPLOYEES[0]!;
-        const actorName = await employeeActorName(hashKey, firstEmployee.employeeNumber);
+      const roster = hashKey ? await listActiveEmployeeNumbers(env) : { state: "error" as const };
+      if (hashKey && roster.state === "ok" && roster.numbers.length > 0) {
+        const actorName = await employeeActorName(hashKey, roster.numbers[0]!);
         await env.EMPLOYEE_LEAVE.idFromName(actorName).ping();
+        dependencies.employee_leave = { ok: true, ms: Date.now() - empStarted };
+      } else if (roster.state === "ok" && roster.numbers.length === 0) {
+        dependencies.employee_leave = { ok: false, ms: Date.now() - empStarted, reason: "empty_roster" };
+      } else {
+        dependencies.employee_leave = { ok: false, ms: Date.now() - empStarted, reason: "roster_error" };
       }
-      dependencies.employee_leave = { ok: true, ms: Date.now() - empStarted };
     } catch {
       dependencies.employee_leave = { ok: false, ms: Date.now() - empStarted };
     }
@@ -226,22 +250,42 @@ async function handleAdminRequests(request: Request, env: AppEnv): Promise<Respo
     const employeeParam = url.searchParams.get("employee");
     const hashKey = await env.SECRETS.get("HASH_KEY");
 
-    const targets = employeeParam
-      ? DEFAULT_EMPLOYEES.filter((e) => e.employeeNumber === employeeParam)
-      : DEFAULT_EMPLOYEES;
+    let employeeNumbers: string[];
+    if (employeeParam) {
+      const lookup = await findEmployee(env, employeeParam);
+      if (lookup.state === "missing") {
+        status = 404;
+        outcome = "not_found";
+        return jsonResponse({ error: { code: "not_found", message: "Employee not found." } }, 404);
+      }
+      if (lookup.state === "error") {
+        status = 500;
+        outcome = "error";
+        return jsonResponse({ error: { code: "unavailable", message: "Admin requests failed." } }, 500);
+      }
+      employeeNumbers = [employeeParam];
+    } else {
+      const roster = await listActiveEmployeeNumbers(env);
+      if (roster.state === "error") {
+        status = 500;
+        outcome = "error";
+        return jsonResponse({ error: { code: "unavailable", message: "Admin requests failed." } }, 500);
+      }
+      employeeNumbers = roster.numbers;
+    }
 
     const results = await Promise.all(
-      targets.map(async (emp) => {
-        const actorName = hashKey ? await employeeActorName(hashKey, emp.employeeNumber) : "";
+      employeeNumbers.map(async (num) => {
+        const actorName = hashKey ? await employeeActorName(hashKey, num) : "";
         if (!actorName) {
-          return { employee_number: emp.employeeNumber, error: "missing_hash_key" };
+          return { employee_number: num, error: "missing_hash_key" };
         }
         const [requests, summary] = await Promise.all([
           env.EMPLOYEE_LEAVE.idFromName(actorName).requests(),
           env.EMPLOYEE_LEAVE.idFromName(actorName).summary("1970-01-01"),
         ]);
         return {
-          employee_number: emp.employeeNumber,
+          employee_number: num,
           balance: {
             entitlement_days: summary.entitlementDays,
             used_days: summary.usedDays,
@@ -362,10 +406,17 @@ async function handleAdminStats(request: Request, env: AppEnv): Promise<Response
     }
 
     const hashKey = await env.SECRETS.get("HASH_KEY");
+    const roster = hashKey ? await listActiveEmployeeNumbers(env) : { state: "error" as const };
+    if (roster.state === "error") {
+      status = 500;
+      outcome = "error";
+      return jsonResponse({ error: { code: "unavailable", message: "Admin stats failed." } }, 500);
+    }
+
     const employeeStats = await Promise.all(
-      DEFAULT_EMPLOYEES.map(async (emp) => {
+      roster.numbers.map(async (num) => {
         if (!hashKey) return null;
-        const actorName = await employeeActorName(hashKey, emp.employeeNumber);
+        const actorName = await employeeActorName(hashKey, num);
         return env.EMPLOYEE_LEAVE.idFromName(actorName).stats();
       }),
     );
@@ -463,20 +514,23 @@ async function handleAdminReset(request: Request, env: AppEnv): Promise<Response
       return jsonResponse({ error: { code: "unavailable", message: "HASH_KEY is not configured." } }, 500);
     }
 
+    const roster = await listActiveEmployees(env);
+    if (roster.state === "error") {
+      status = 500;
+      outcome = "error";
+      return jsonResponse({ error: { code: "unavailable", message: "Admin reset failed." } }, 500);
+    }
+
     await Promise.all([
-      ...DEFAULT_EMPLOYEES.map(async (emp) => {
+      ...roster.employees.map(async (emp) => {
         const actorName = await employeeActorName(hashKey, emp.employeeNumber);
-        const pinHashValue = await pinHash(hashKey, emp.employeeNumber, emp.pin);
-        const secretAnswerHash = emp.secretAnswer
-          ? await answerHash(hashKey, emp.employeeNumber, emp.secretAnswer)
-          : null;
         return env.EMPLOYEE_LEAVE.idFromName(actorName).reset({
           firstName: emp.firstName,
           entitlementDays: emp.entitlementDays,
           openingUsedDays: emp.openingUsedDays,
-          pinHash: pinHashValue,
+          pinHash: emp.pinHash,
           secretQuestion: emp.secretQuestion,
-          secretAnswerHash,
+          secretAnswerHash: emp.secretAnswerHash,
         });
       }),
       env.HR_DESK.idFromName("cedar").reset(),
@@ -501,6 +555,111 @@ async function handleAdminReset(request: Request, env: AppEnv): Promise<Response
     const credentials = await loadLangfuseCredentials(env);
     const trace = await exportSpan(credentials, {
       spanName: "admin.reset",
+      startTime: startedAt,
+      endTime: Date.now(),
+      outcome,
+      metadata: {
+        outcome,
+        duration_ms: durationMs,
+      },
+    });
+    writeCompletionLog({
+      event: "admin.completed",
+      call_ref: "none",
+      outcome,
+      status,
+      duration_ms: durationMs,
+      trace,
+    });
+  }
+}
+
+/**
+ * Seeds the SQL roster from the synthetic DEFAULT_EMPLOYEES list.
+ * DEFAULT_EMPLOYEES is synthetic demo data only; this route is idempotent.
+ */
+async function handleAdminSeedEmployees(request: Request, env: AppEnv): Promise<Response> {
+  const startedAt = Date.now();
+  let status = 200;
+  let outcome: LogOutcome = "ok";
+
+  try {
+    if (request.method !== "POST") {
+      throw new HttpRequestError(405, "method_not_allowed");
+    }
+
+    if (!(await requireOpsAuth(request, env))) {
+      status = 401;
+      outcome = "unauthorized";
+      return errorResponse(new HttpRequestError(401, "unauthorized"));
+    }
+
+    const hashKey = await env.SECRETS.get("HASH_KEY");
+    if (!hashKey) {
+      status = 500;
+      outcome = "error";
+      return jsonResponse({ error: { code: "unavailable", message: "HASH_KEY is not configured." } }, 500);
+    }
+
+    const db = resolveTeradb(env);
+    if (!db) {
+      status = 500;
+      outcome = "error";
+      return jsonResponse({ error: { code: "unavailable", message: "Database is not available." } }, 500);
+    }
+
+    const statements = await Promise.all(
+      DEFAULT_EMPLOYEES.map(async (emp) => {
+        const pinHashValue = await pinHash(hashKey, emp.employeeNumber, emp.pin);
+        const secretAnswerHash = emp.secretAnswer
+          ? await answerHash(hashKey, emp.employeeNumber, emp.secretAnswer)
+          : null;
+        return db
+          .prepare(
+            `INSERT INTO Employee (employee_number, first_name, entitlement_days, opening_used_days, pin_hash, secret_question, secret_answer_hash, active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+             ON CONFLICT(employee_number) DO UPDATE SET
+               first_name = excluded.first_name,
+               entitlement_days = excluded.entitlement_days,
+               opening_used_days = excluded.opening_used_days,
+               pin_hash = excluded.pin_hash,
+               secret_question = excluded.secret_question,
+               secret_answer_hash = excluded.secret_answer_hash,
+               active = excluded.active`,
+          )
+          .bind(
+            emp.employeeNumber,
+            emp.firstName,
+            emp.entitlementDays,
+            emp.openingUsedDays,
+            pinHashValue,
+            emp.secretQuestion,
+            secretAnswerHash,
+          );
+      }),
+    );
+
+    await db.batch(statements);
+
+    return jsonResponse({ status: "seeded", count: DEFAULT_EMPLOYEES.length });
+  } catch (error) {
+    if (error instanceof HttpRequestError) {
+      status = error.status;
+      outcome = error.code === "unauthorized"
+        ? "unauthorized"
+        : error.code === "method_not_allowed"
+          ? "method_not_allowed"
+          : "invalid_input";
+      return errorResponse(error);
+    }
+    status = 500;
+    outcome = "error";
+    return jsonResponse({ error: { code: "unavailable", message: "Admin seed failed." } }, 500);
+  } finally {
+    const durationMs = Date.now() - startedAt;
+    const credentials = await loadLangfuseCredentials(env);
+    const trace = await exportSpan(credentials, {
+      spanName: "admin.seed_employees",
       startTime: startedAt,
       endTime: Date.now(),
       outcome,

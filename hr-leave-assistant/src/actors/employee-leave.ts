@@ -495,6 +495,46 @@ export class EmployeeLeave extends StatefulActor {
   }
 
   /**
+   * Ensures the actor has a profile, creating one from the roster if missing,
+   * or refreshing identity fields from the roster while leaving leave state,
+   * failed attempts, and lockout untouched.
+   *
+   * @param seed - The employee profile from the roster.
+   * @returns "ok" on success.
+   */
+  async ensureProfile(seed: EmployeeResetSeed): Promise<"ok"> {
+    const existing = await this.ctx.storage.get<EmployeeProfile>("profile");
+
+    if (existing) {
+      existing.firstName = seed.firstName;
+      existing.entitlementDays = seed.entitlementDays;
+      existing.openingUsedDays = seed.openingUsedDays;
+      existing.pinHash = seed.pinHash;
+      existing.secretQuestion = seed.secretQuestion ?? null;
+      existing.secretAnswerHash = seed.secretAnswerHash ?? null;
+      await this.ctx.storage.put("profile", existing);
+    } else {
+      const profile: EmployeeProfile = {
+        firstName: seed.firstName,
+        entitlementDays: seed.entitlementDays,
+        openingUsedDays: seed.openingUsedDays,
+        pinHash: seed.pinHash,
+        secretQuestion: seed.secretQuestion ?? null,
+        secretAnswerHash: seed.secretAnswerHash ?? null,
+        failedAttempts: 0,
+        lockedUntil: null,
+      };
+      await Promise.all([
+        this.ctx.storage.put("profile", profile),
+        this.ctx.storage.put("requests", [] satisfies LeaveRequestRecord[]),
+        this.ctx.storage.put("counters", { ...ZERO_COUNTERS }),
+      ]);
+    }
+
+    return "ok";
+  }
+
+  /**
    * Resets this employee actor to a clean state using the provided seed data.
    * Destroys all existing requests and counters.
    *

@@ -63,11 +63,33 @@ function createMockEnv(options: {
       put: vi.fn(async () => {}),
       delete: vi.fn(async () => {}),
     },
+    TERADB: {
+      prepare: vi.fn(() => {
+        const stmt = {
+          bind: vi.fn(() => stmt),
+          first: vi.fn(async () => ({
+            employee_number: "1001",
+            first_name: "Alex",
+            entitlement_days: 14,
+            opening_used_days: 6,
+            pin_hash: "deadbeef00000000000000000000000000000000000000000000000000000000",
+            secret_question: null,
+            secret_answer_hash: null,
+            active: 1,
+          })),
+          all: vi.fn(async () => ({ results: [{ "1": 1 }] })),
+          run: vi.fn(async () => ({ results: [{ "1": 1 }] })),
+        };
+        return stmt;
+      }),
+      batch: vi.fn(async () => [{ results: [] }]),
+    },
     EMPLOYEE_LEAVE: {
       idFromName: () => ({
         verifyPin: vi.fn(async () => ({ status: "ok" as const, firstName: "Alex" })),
         verifySecretAnswer: vi.fn(async () => ({ status: "ok" as const, firstName: "Alex" })),
         setSecretQuestion: vi.fn(async () => "ok" as const),
+        ensureProfile: vi.fn(async () => "ok" as const),
         summary: vi.fn(async () => ({
           firstName: "Alex",
           entitlementDays: 14,
@@ -607,10 +629,36 @@ describe("completion log coverage", () => {
       expect(jsonLogs[0]!.failed).toEqual(["hr_desk"]);
       expect(jsonLogs[0]!.deps_ms).toMatchObject({
         kv: expect.any(Number),
+        sql: expect.any(Number),
         hr_desk: expect.any(Number),
         caller_profile: expect.any(Number),
         employee_leave: expect.any(Number),
       });
+    });
+
+    it("reports sql.ok false when SQL throws and still lists other dependencies", async () => {
+      const env = createMockEnv();
+      env.TERADB = {
+        prepare: vi.fn(() => {
+          throw new Error("sql down");
+        }),
+        batch: vi.fn(async () => []),
+      };
+
+      const req = makeOpsRequest("GET");
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(503);
+      expect(jsonLogs).toHaveLength(1);
+      assertRequiredFields(jsonLogs[0]!);
+      expect(jsonLogs[0]!.event).toBe("ops.completed");
+      expect(jsonLogs[0]!.outcome).toBe("error");
+      expect(jsonLogs[0]!.failed).toContain("sql");
+      const deps = jsonLogs[0]!.deps_ms as Record<string, number>;
+      expect(deps.sql).toBeGreaterThanOrEqual(0);
+      expect(deps.kv).toBeGreaterThanOrEqual(0);
+      expect(deps.hr_desk).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -686,6 +734,19 @@ describe("completion log coverage", () => {
     it("POST /admin/reset writes exactly one JSON log line", async () => {
       const env = createMockEnv();
       const req = makeAdminRequest("/admin/reset", "POST");
+
+      const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
+      const jsonLogs = parseLogLines(logs);
+
+      expect(result.status).toBe(200);
+      expect(jsonLogs).toHaveLength(1);
+      assertRequiredFields(jsonLogs[0]!);
+      expect(jsonLogs[0]!.event).toBe("admin.completed");
+    });
+
+    it("POST /admin/seed-employees writes exactly one JSON log line", async () => {
+      const env = createMockEnv();
+      const req = makeAdminRequest("/admin/seed-employees", "POST");
 
       const { result, logs } = await withLogCapture(() => handler.fetch(req, env));
       const jsonLogs = parseLogLines(logs);

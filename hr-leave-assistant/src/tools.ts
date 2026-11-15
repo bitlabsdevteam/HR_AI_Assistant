@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { DEFAULT_EMPLOYEES } from "./config/default-employees";
 import type { PolicyTopic } from "./config/default-profile";
 import { policyAnswer, policyTopicSchema } from "./domain/profile";
 import { spokenIsoDate, todayIsoInTimeZone } from "./domain/time";
@@ -10,6 +9,7 @@ import type { AppEnv } from "./env";
 import { createSessionToken, verifySessionToken } from "./lib/auth";
 import { loadCompanyContext, loadCompanyProfile } from "./lib/kv";
 import { employeeActorName, employeePseudonym, leaveRequestKey, newReference, pinHash, callbackRequestKey } from "./lib/identity";
+import { findEmployee } from "./lib/roster";
 
 import type { CompletionLog } from "./lib/log";
 
@@ -62,6 +62,7 @@ const requestHrCallbackInputSchema = z.object({
 /** Observation object shared between the MCP handler and tool implementations. */
 export interface McpObservation {
   kv?: "hit" | "missing" | "error";
+  roster?: "hit" | "missing" | "error";
   emp?: string;
   actor_ms?: number;
   call_ref?: string;
@@ -152,48 +153,79 @@ export async function handleVerifyEmployee(
 
   observation.emp = await employeePseudonym(hashKey, employee_number);
 
-  const employee = DEFAULT_EMPLOYEES.find((e) => e.employeeNumber === employee_number);
   const suppliedPinHash = await pinHash(hashKey, employee_number, pin);
   const nowIso = new Date().toISOString();
 
-  if (!employee) {
+  const rosterResult = await findEmployee(env, employee_number);
+  observation.roster = rosterResult.state;
+
+  if (rosterResult.state === "error") {
+    return toolError("unavailable", "Sign-in is unavailable right now. Please ask for an HR callback.");
+  }
+
+  if (rosterResult.state === "missing") {
     const empHash = await employeeActorName(hashKey, employee_number);
-    const result = await withActorTiming(observation, () =>
-      env.HR_DESK.idFromName("cedar").failUnknown(empHash, nowIso),
+    try {
+      const result = await withActorTiming(observation, () =>
+        env.HR_DESK.idFromName("cedar").failUnknown(empHash, nowIso),
+      );
+      observation.actor_event = result.status === "locked" ? "unknown_locked" : "unknown_failed";
+      if (result.status === "locked") {
+        return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
+      }
+      return toolError("auth_failed", `That didn't match. You have ${result.attemptsLeft} tries left.`);
+    } catch {
+      return toolError("unavailable", "Sign-in is unavailable right now. Please ask for an HR callback.");
+    }
+  }
+
+  const employee = rosterResult.employee;
+  const actorName = await employeeActorName(hashKey, employee_number);
+
+  try {
+    await withActorTiming(observation, () =>
+      env.EMPLOYEE_LEAVE.idFromName(actorName).ensureProfile({
+        firstName: employee.firstName,
+        entitlementDays: employee.entitlementDays,
+        openingUsedDays: employee.openingUsedDays,
+        pinHash: employee.pinHash,
+        secretQuestion: employee.secretQuestion,
+        secretAnswerHash: employee.secretAnswerHash,
+      }),
     );
-    observation.actor_event = result.status === "locked" ? "unknown_locked" : "unknown_failed";
+  } catch {
+    return toolError("unavailable", "Sign-in is unavailable right now. Please ask for an HR callback.");
+  }
+
+  try {
+    const result = await withActorTiming(observation, () =>
+      env.EMPLOYEE_LEAVE.idFromName(actorName).verifyPin(suppliedPinHash, nowIso),
+    );
+
+    observation.actor_event = result.status === "ok" ? "pin_verified" : result.status === "locked" ? "pin_locked" : "pin_failed";
+
     if (result.status === "locked") {
       return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
     }
-    return toolError("auth_failed", `That didn't match. You have ${result.attemptsLeft} tries left.`);
+
+    if (result.status === "failed") {
+      return toolError("auth_failed", `That didn't match. You have ${result.attemptsLeft} tries left.`);
+    }
+
+    const token = await createSessionToken({
+      employeeNumber: employee_number,
+      hashKey,
+      bind: conversationId ?? "none",
+      nowSeconds: Math.floor(Date.now() / 1_000),
+    });
+
+    return toolSuccess(
+      `Welcome, ${result.firstName}.`,
+      { auth_token: token, first_name: result.firstName },
+    );
+  } catch {
+    return toolError("unavailable", "Sign-in is unavailable right now. Please ask for an HR callback.");
   }
-
-  const actorName = await employeeActorName(hashKey, employee_number);
-  const result = await withActorTiming(observation, () =>
-    env.EMPLOYEE_LEAVE.idFromName(actorName).verifyPin(suppliedPinHash, nowIso),
-  );
-
-  observation.actor_event = result.status === "ok" ? "pin_verified" : result.status === "locked" ? "pin_locked" : "pin_failed";
-
-  if (result.status === "locked") {
-    return toolError("locked", `That didn't match. Your account is locked for ${result.minutesLeft} minutes. I can arrange an HR callback.`);
-  }
-
-  if (result.status === "failed") {
-    return toolError("auth_failed", `That didn't match. You have ${result.attemptsLeft} tries left.`);
-  }
-
-  const token = await createSessionToken({
-    employeeNumber: employee.employeeNumber,
-    hashKey,
-    bind: conversationId ?? "none",
-    nowSeconds: Math.floor(Date.now() / 1_000),
-  });
-
-  return toolSuccess(
-    `Welcome, ${result.firstName}.`,
-    { auth_token: token, first_name: result.firstName },
-  );
 }
 
 /**

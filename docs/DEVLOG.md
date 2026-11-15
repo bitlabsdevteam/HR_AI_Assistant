@@ -355,3 +355,27 @@ Corrections to my first diagram: (1) N80 speaks the `reference` returned by `app
 - **Verdict**: design is sound. Still open from 2026-11-14: `degradedVariablesResponse` returns `leave_changes_enabled: "true"` (`webhook.ts:295`). New: the 2,000 ms internal deadline exceeds the 1,500 ms Telnyx default, and is BLOCKING until the assistant readback shows `dynamic_variables_webhook_timeout_ms` = 3000, because at the default the log says `ready` while the caller got the assistant defaults (C-5, unverified); the Langfuse export runs before the response but is capped at 300 ms (non-blocking); log field `kv` takes `hit|missing|error` but TDD §5 and §10 say `fallback` (contract mismatch). Proposed: promote `is_open_now` from Should to Must with a two-branch variable edge (`"true"` to transfer or HR, `"false"` to callback) so one variable edge fires on every call; add `recent_caller` (Stretch, per KV_design). `hr_desk_status` considered and dropped: `HrDesk` actor state is per employee number or a desk-wide counter, not a pre-sign-in caller fact. Routing column is per TDD §6; the live workflow readback (nodes `verify_employee`, `hr_manager`) was not checked for variable edges.
 - **Review line**: reviewed 2364ed1 (webhook, signature, langfuse); findings raised 3 new + 1 carried; fixed 0.
 - **Addendum, same review (independent read-only subagent, 2026-11-15)**: confirmed at `kv.ts:56-59`, `webhook.ts:120` and `tools.ts:312` that a KV error returns `leave_changes_enabled: true` with `context_status: "ready"`, so the pause flag fails open on both the webhook and the tool path (TDD §5 specifies this fail-open, so it is not a code deviation: a design question for David, whether the pause should fail closed, and a doc fix, since TDD's "the actors still guard every change" is false for the pause flag). Also confirmed `langfuse.ts:89-91`: the documented initialization payload has no `telnyx_conversation_id`, so the webhook span is skipped and the `ready` log line cannot be joined to a conversation. OpenCode-facing items from this addendum: 1 (the join-key gap). Fixed 0.
+
+## 2026-11-15 — build: Epic #65, issues #66–#71 (SQL roster)
+
+- **Model**: OpenCode / Kimi-K2.6 (`telnyx/moonshotai/Kimi-K2.6`)
+- **Wiki pages consulted**:
+  - `Telynyx/index.md`
+  - `Telynyx/wiki/telnyx/edge-compute-data/edge-compute-data-sqldb-runtime-api.md`
+  - `Telynyx/wiki/telnyx/edge-compute-data/edge-compute-data-sqldb-limits.md`
+  - `Telynyx/wiki/telnyx/edge-compute/edge-compute-manifest-func-toml.md`
+- **What was built**:
+  1. **Issue #66**: Added `[storage.sqldb.TERADB]` to `telnyx.toml`; ran `telnyx-edge types`; added `SqlDatabaseBinding` to `src/env.ts`; added `resolveTeradb` runtime helper that tries `fetch` argument then imported `env`; added SQL ping to `/ops/check`.
+  2. **Issue #67**: Added `sql/001_employee.sql` schema; added `src/lib/roster.ts` with `findEmployee`, `listActiveEmployeeNumbers`, and `listActiveEmployees`; zod-validated rows; 1000 ms deadline; full unit tests (hit, missing, inactive, malformed, SQL throw, deadline exceeded, bind-no-leak).
+  3. **Issue #68**: Added `POST /admin/seed-employees` that batches `INSERT ... ON CONFLICT` from `DEFAULT_EMPLOYEES`; computes hashes via `pinHash`/`answerHash`; returns count only.
+  4. **Issue #69**: Rewrote `handleVerifyEmployee` to call `findEmployee` instead of `DEFAULT_EMPLOYEES`; added `ensureProfile` to `EmployeeLeave` actor (creates or refreshes identity without touching lockout/requests/counters); `verifyPin` no longer throws "not been seeded"; added `roster` field to `McpObservation` and logs; wrapped actor calls in try/catch returning `unavailable`; updated `token-handoff.test.ts` and `tools-secret.test.ts` with SQL mocks.
+  5. **Issue #70**: Updated `/ops/check`, `/admin/requests`, `/admin/stats`, `/admin/reset` to iterate the SQL roster; `reset` uses stored hashes directly; `DEFAULT_EMPLOYEES` now imported only for the seed route; added `admin-roster.test.ts`.
+  6. **Issue #71**: Updated `docs/TDD.md` §3.1 (added SQL roster row, removed "no database"), `docs/PRD.md` §3.1, `docs/GRADING_MAP.md`, `AGENTS.md` (invariants + read-before-working row), `tech_support.md` (SQL commands + three-layer description), and this DEVLOG entry.
+  7. `npm run typecheck` passes; `npm test` passes (158 tests across 16 files). Deploy to be done on David's request.
+- **What went wrong**:
+  - `tests/log.test.ts` ops-check dependency test needed `sql` added to expected `deps_ms` object after the SQL ping was introduced.
+  - TypeScript strictness: `SqlPreparedStatement` mock generics required explicit `as unknown` casts in several test files.
+  - `EmployeeLeaveStub` addition of `ensureProfile` required updating 6 test files' mock stubs.
+- **Observations**:
+  - The wiki warns that SQL bindings may only be on imported `env`, not the `fetch` argument. `resolveTeradb` implements the fallback; which one wins at runtime will be verified after deploy and recorded here.
+  - `telnyx-edge types` successfully generated `TERADB: SqlDatabase` with `@telnyx/edge-runtime` 0.16.1.

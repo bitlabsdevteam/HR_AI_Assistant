@@ -9,6 +9,7 @@ import { loadCompanyContext } from "./lib/kv";
 import { writeCompletionLog, type CompletionLog, type LogOutcome } from "./lib/log";
 import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 import { verifyTelnyxWebhookSignature } from "./lib/signature";
+import { withDeadline } from "./lib/deadline";
 
 /** Maximum time to wait for KV and actor calls during webhook processing (1.5 seconds). */
 const WEBHOOK_DEADLINE_MS = 1_500;
@@ -295,30 +296,6 @@ async function resolveCallerStatus(
     return { callerStatus: record.returning ? "returning" : "new" };
   } finally {
     input.onActorMilliseconds(Date.now() - startedAt);
-  }
-}
-
-/**
- * Wraps a promise with a deadline. Rejects with an Error if the operation
- * does not complete within the specified milliseconds.
- *
- * @param operation - The promise to race.
- * @param deadlineMs - Maximum time to wait.
- * @returns The resolved value of the operation.
- * @throws Error "Deadline exceeded" if the timeout wins.
- */
-async function withDeadline<T>(operation: Promise<T>, deadlineMs: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("Deadline exceeded")), deadlineMs);
-  });
-
-  try {
-    return await Promise.race([operation, timeout]);
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
   }
 }
 

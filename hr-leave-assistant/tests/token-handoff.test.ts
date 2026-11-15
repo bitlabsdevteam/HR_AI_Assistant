@@ -6,20 +6,6 @@ import type { AppEnv } from "../src/env";
 
 const HASH_KEY = "test-hash-key-for-token-handoff";
 
-vi.mock("../src/config/default-employees", () => ({
-  DEFAULT_EMPLOYEES: [
-    {
-      employeeNumber: "1001",
-      firstName: "Alex",
-      entitlementDays: 14,
-      openingUsedDays: 6,
-      pin: "1111",
-      secretQuestion: null,
-      secretAnswer: null,
-    },
-  ],
-}));
-
 function createEnv(summary = vi.fn(async () => ({
   firstName: "Alex",
   entitlementDays: 14,
@@ -27,13 +13,56 @@ function createEnv(summary = vi.fn(async () => ({
   remainingDays: 8,
   upcoming: [],
 }))) {
+  const stmt = {
+    bind: () => stmt,
+    first: async () => ({
+      employee_number: "1001",
+      first_name: "Alex",
+      entitlement_days: 14,
+      opening_used_days: 6,
+      pin_hash: "deadbeef00000000000000000000000000000000000000000000000000000000",
+      secret_question: null,
+      secret_answer_hash: null,
+      active: 1,
+    }),
+    all: async () => ({ results: [] }),
+    run: async () => ({ results: [] }),
+  };
   const env = {
     SECRETS: { get: async (name: string) => (name === "HASH_KEY" ? HASH_KEY : undefined) },
     HR_KV: { get: async () => null, put: async () => {}, delete: async () => {} },
+    TERADB: {
+      prepare: () => stmt,
+      batch: async () => [],
+    },
     EMPLOYEE_LEAVE: {
       idFromName: () => ({
         verifyPin: async () => ({ status: "ok" as const, firstName: "Alex" }),
+        verifySecretAnswer: async () => ({ status: "ok" as const, firstName: "Alex" }),
+        setSecretQuestion: async () => "ok" as const,
+        ensureProfile: async () => "ok" as const,
         summary,
+      }),
+    },
+    HR_DESK: {
+      idFromName: () => ({
+        addCallback: async () => ({ reference: "CB-TEST01", replayed: false }),
+        failUnknown: async () => ({ status: "failed" as const, attemptsLeft: 2 }),
+        listCallbacks: async () => [],
+        stats: async () => ({
+          callbacksQueued: 0,
+          callbackReplays: 0,
+          unknownEmployeeAttempts: 0,
+          unknownLockouts: 0,
+        }),
+        reset: async () => "ok" as const,
+        ping: async () => "ok" as const,
+      }),
+    },
+    CALLER_PROFILE: {
+      idFromName: () => ({
+        recordCall: async () => ({ callCount: 1, returning: false }),
+        ping: async () => "ok" as const,
       }),
     },
   } as unknown as AppEnv;

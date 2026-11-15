@@ -64,6 +64,7 @@ function createMockEnv(options: {
           }),
           reset: async () => "ok",
           ping: async () => "ok",
+          ensureProfile: async () => "ok",
         } as ReturnType<AppEnv["EMPLOYEE_LEAVE"]["idFromName"]>),
     },
     HR_DESK: {

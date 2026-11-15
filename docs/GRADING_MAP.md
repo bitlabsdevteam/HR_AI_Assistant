@@ -41,7 +41,7 @@ Builders (OpenCode) apply the "Build rule" column. The reviewer (Claude Code) ch
 | --- | --- | --- | --- | --- |
 | Solves an actual problem | n/a | PRD | README | Employees check and book leave without waiting for HR. Data is synthetic. |
 | Realistic flows with edge cases | Test at least one negative case per important node (wrong PIN, insufficient balance, overlap, too-late cancel) | TDD §12 | Test and call list | Each negative case has a result. |
-| Practical value of the edge architecture | n/a | TDD §3 | Live URL; KV and actor evidence | One function, state next to compute, no database to run. |
+| Practical value of the edge architecture | n/a | TDD §3 | Live URL; KV, SQL roster and actor evidence | One function, state next to compute; SQL roster for read-heavy identity data, actors for safe read-modify-write. |
 | **Happy path AND fallback paths** | **Every slice proves its happy path and at least one fallback before it counts as done** | TDD §11, §12 | One call per path in the DEVLOG | Webhook down, KV missing, tool failing: the caller still gets an honest answer. |
 
 ## Not on the grading list but required

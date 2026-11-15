@@ -32,7 +32,7 @@ Confirmed choices: HR leave assistant (balance, apply, cancel), English, TypeScr
 
 | Tier | Contents | Rule |
 | --- | --- | --- |
-| **Must** | Everything in §2, the journeys in §5, the requirements in §6, the evidence in §8 | Never cut. Finished before anything else starts. |
+| **Must** | Everything in §2, the journeys in §5, the requirements in §6, the evidence in §8; SQL roster (`teradb.Employee`) for credentials and identity | Never cut. Finished before anything else starts. |
 | **Should** | Live transfer to the HR team during open hours; escalation after five minutes | Day 3, only when Must is green. |
 | **Stretch** | Log export to a hosted viewer (`telnyx-edge log-export`) | Only with time left after Should. |
 
