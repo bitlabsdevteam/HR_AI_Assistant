@@ -255,6 +255,7 @@ describe("completion log coverage", () => {
       expect(jsonLogs[0]!.trace).toBe("off");
       expect(typeof jsonLogs[0]!.call_ref).toBe("string");
       expect(jsonLogs[0]!.call_ref).toMatch(/^c_[0-9a-f]{12}$/);
+      expect(jsonLogs[0]!.session).toBe("missing");
     });
 
     it("writes exactly one JSON log line when the method is not POST", async () => {
@@ -275,6 +276,7 @@ describe("completion log coverage", () => {
       assertRequiredFields(jsonLogs[0]!);
       expect(jsonLogs[0]!.event).toBe("webhook.completed");
       expect(jsonLogs[0]!.outcome).toBe("method_not_allowed");
+      expect(jsonLogs[0]!.session).toBe("skipped");
     });
 
     it("writes exactly one JSON log line when a secret throws after signature verification", async () => {
@@ -291,6 +293,7 @@ describe("completion log coverage", () => {
       assertRequiredFields(jsonLogs[0]!);
       expect(jsonLogs[0]!.event).toBe("webhook.completed");
       expect(jsonLogs[0]!.outcome).toBe("degraded");
+      expect(jsonLogs[0]!.session).toBe("skipped");
     });
   });
 

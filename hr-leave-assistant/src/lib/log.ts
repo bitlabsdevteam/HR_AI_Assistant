@@ -55,6 +55,8 @@ export interface CompletionLog {
   actor_ms?: number;
   /** Whether KV read was a hit, missing, or errored. */
   kv?: "hit" | "missing" | "error";
+  /** Whether the caller had a recent session in KV: hit, missing, error, or skipped. */
+  session?: "hit" | "missing" | "error" | "skipped";
   /** What happened to the Langfuse trace export: sent, skipped, failed, or off. */
   trace?: "sent" | "skipped" | "failed" | "off";
   /** Request path, for router events that hit an unknown route. Query string is excluded. */
@@ -67,7 +69,8 @@ export interface CompletionLog {
     | "invalid_conversation_id"
     | "actor_unavailable"
     | "kv_missing"
-    | "kv_error";
+    | "kv_error"
+    | "session_write_failed";
   /** Names of dependencies that failed during an ops check. */
   failed?: string[];
   /** Per-dependency timing in milliseconds (ops check). */

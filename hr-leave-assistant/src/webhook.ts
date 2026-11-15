@@ -2,15 +2,16 @@ import { z } from "zod";
 import { DEFAULT_PROFILE } from "./config/default-profile";
 import { isOpenNow, todayIsoInTimeZone, todaySpokenInTimeZone } from "./domain/time";
 import type { AppEnv } from "./env";
-import { callerActorName, callerPseudonym, newCallRef } from "./lib/identity";
+import { callerActorName, callerPseudonym, newCallRef, sha256Hex } from "./lib/identity";
+import { callerSessionKey, loadCallerSession, saveCallerSession } from "./lib/session";
 import { errorResponse, HttpRequestError, jsonResponse, readRawBody } from "./lib/http";
 import { loadCompanyContext } from "./lib/kv";
 import { writeCompletionLog, type CompletionLog, type LogOutcome } from "./lib/log";
 import { loadLangfuseCredentials, exportSpan } from "./lib/langfuse";
 import { verifyTelnyxWebhookSignature } from "./lib/signature";
 
-/** Maximum time to wait for KV and actor calls during webhook processing (2 seconds). */
-const WEBHOOK_DEADLINE_MS = 2_000;
+/** Maximum time to wait for KV and actor calls during webhook processing (1.5 seconds). */
+const WEBHOOK_DEADLINE_MS = 1_500;
 
 /** Zod schema for the Telnyx assistant initialization webhook payload. */
 const initializationEventSchema = z.object({
@@ -52,6 +53,10 @@ export async function handleDynamicVariables(
   let caller: string | undefined;
   let actorMilliseconds: number | undefined;
   let kv: "hit" | "missing" | "error" | undefined;
+  let sessionState: "hit" | "missing" | "error" | "skipped" = "skipped";
+  let sessionKey: string | undefined;
+  let callIdHash: string | undefined;
+  let recentCaller = false;
   let detail: CompletionLog["detail"];
   let signatureVerified = false;
   let conversationId: string | undefined;
@@ -92,6 +97,21 @@ export async function handleDynamicVariables(
     conversationId = event.data.payload.telnyx_conversation_id;
     const hashKey = await env.SECRETS.get("HASH_KEY");
 
+    // Build the session read promise if we have enough context.
+    let sessionPromise: Promise<{ state: "hit" | "missing" | "error" | "skipped"; recent?: boolean }> = Promise.resolve({ state: "skipped" as const });
+    if (phoneNumber && hashKey) {
+      const keyPromise = callerSessionKey(hashKey, phoneNumber);
+      const hashPromise = sha256Hex(callId).then((h) => h.slice(0, 16));
+      sessionPromise = withDeadline(
+        Promise.all([keyPromise, hashPromise]).then(([key, hash]) => {
+          sessionKey = key;
+          callIdHash = hash;
+          return loadCallerSession(env, key, hash);
+        }),
+        WEBHOOK_DEADLINE_MS,
+      );
+    }
+
     // Load company context and caller status in parallel, each with a deadline.
     const contextPromise = withDeadline(loadCompanyContext(env), WEBHOOK_DEADLINE_MS);
     const callerPromise = withDeadline(
@@ -110,9 +130,10 @@ export async function handleDynamicVariables(
       WEBHOOK_DEADLINE_MS,
     );
 
-    const [contextResult, callerResult] = await Promise.allSettled([
+    const [contextResult, callerResult, sessionResult] = await Promise.allSettled([
       contextPromise,
       callerPromise,
+      sessionPromise,
     ]);
 
     const context =
@@ -136,6 +157,13 @@ export async function handleDynamicVariables(
       detail = "actor_unavailable";
     }
 
+    if (sessionResult.status === "fulfilled") {
+      sessionState = sessionResult.value.state;
+      recentCaller = sessionResult.value.recent ?? false;
+    } else {
+      sessionState = "error";
+    }
+
     outcome = "ready";
     return jsonResponse({
       dynamic_variables: {
@@ -145,6 +173,7 @@ export async function handleDynamicVariables(
         is_open_now: String(isOpenNow(now, context.profile)),
         leave_changes_enabled: String(context.leaveChangesEnabled),
         caller_status: callerStatus,
+        recent_caller: String(recentCaller),
         context_status: "ready",
         call_ref: callRef,
       },
@@ -173,6 +202,21 @@ export async function handleDynamicVariables(
       500,
     );
   } finally {
+    // Blind session write (best-effort, never changes the response).
+    if (sessionKey && callIdHash) {
+      const record = {
+        v: 1 as const,
+        last_call_at: new Date().toISOString(),
+        last_call_ref: callRef,
+        last_call_id_hash: callIdHash,
+        last_outcome: (outcome === "ready" ? "ready" : "degraded") as "ready" | "degraded",
+      };
+      const writeOk = await saveCallerSession(env, sessionKey, record);
+      if (!writeOk && !detail) {
+        detail = "session_write_failed";
+      }
+    }
+
     const durationMs = Date.now() - startedAt;
     const credentials = await loadLangfuseCredentials(env);
     const trace = await exportSpan(credentials, {
@@ -200,6 +244,7 @@ export async function handleDynamicVariables(
       duration_ms: durationMs,
       actor_ms: actorMilliseconds,
       kv,
+      session: sessionState,
       detail,
       trace,
     });
@@ -292,8 +337,9 @@ function degradedVariablesResponse(callRef: string): Response {
       today_iso: todayIsoInTimeZone(now, DEFAULT_PROFILE.timezone),
       today_spoken: todaySpokenInTimeZone(now, DEFAULT_PROFILE.timezone),
       is_open_now: String(isOpenNow(now, DEFAULT_PROFILE)),
-      leave_changes_enabled: "true",
+      leave_changes_enabled: "false",
       caller_status: "unknown",
+      recent_caller: "false",
       context_status: "degraded",
       call_ref: callRef,
     },
