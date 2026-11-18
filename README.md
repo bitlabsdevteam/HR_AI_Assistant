@@ -9,7 +9,7 @@ Built for the Telnyx coding challenge on **Telnyx AI Assistants** (Conversation 
 | Company | TeraLabs Inc. (synthetic), HR desk Monday to Friday, 9 AM to 5 PM Eastern Time |
 | Leave rules | 14 days annual leave per leave year (1 Jul 2026 to 30 Jun 2027); Monday to Friday only; 26 Nov 2026, 25 Dec 2026 and 1 Jan 2027 do not count; at least one day's notice; up to 10 working days per request; annual leave within the balance is approved immediately |
 | Live function | `https://hr-leave-assistant-903aedd3-9.telnyxcompute.com` |
-| Phone number | **`<TeraLabs HR number: fill in before submission>`** (not recorded in this repository) |
+| Phone number | **`+1 253 294 7206`** (`+12532947206`), call in to test the AI assistant workflow |
 | Checks at last run | `npm run typecheck` clean; `npm test` 158 tests in 16 files pass (2026-11-18) |
 
 > All data is synthetic. Never use real employee data or real PINs with this project.
@@ -194,7 +194,7 @@ If this is the first time on a fresh database, also run `POST $BASE/admin/seed-e
 
 ### 4.3 Step 1: test by phone (the real experience)
 
-Call **`<TeraLabs HR number>`**. Speak digits one at a time. Dates in the examples assume today is mid-November 2026; use any Monday to Friday range at least one day away inside the leave year.
+Call **`+1 253 294 7206`** (`+12532947206`). Speak digits one at a time. Dates in the examples assume today is mid-November 2026; use any Monday to Friday range at least one day away inside the leave year.
 
 **Journey A: balance, apply, cancel (employee 1001)**
 
