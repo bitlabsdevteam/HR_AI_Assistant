@@ -176,6 +176,9 @@ telnyx-edge secrets delete HRLEAVE_MCP_BEARER
 
 ## 6. Logs & Metrics
 
+> **Retention:** Live logs are retained for **72 hours** (as of 2026-11-15).  
+> **Format:** The application emits one structured JSON line per request (see `src/lib/log.ts`). Use `--json` with `jq` for filtering.
+
 ### 6.1 Function logs
 
 ```bash
@@ -200,7 +203,166 @@ telnyx-edge logs hr-leave-assistant --tail
 telnyx-edge logs hr-leave-assistant --tail --json
 ```
 
-### 6.2 Metrics
+### 6.2 Longer periods
+
+```bash
+# Last 30 minutes
+telnyx-edge logs hr-leave-assistant --since 30m
+
+# Last 2 hours
+telnyx-edge logs hr-leave-assistant --since 2h
+
+# Last 6 hours
+telnyx-edge logs hr-leave-assistant --since 6h
+
+# Last 500 lines (ignores time)
+telnyx-edge logs hr-leave-assistant --last 500
+
+# Invocation logs for last 2 hours
+telnyx-edge logs hr-leave-assistant --type invocations --since 2h
+
+# JSON across a long window
+telnyx-edge logs hr-leave-assistant --since 6h --json
+```
+
+### 6.3 Error logs
+
+```bash
+# Only error outcomes
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.outcome == "error")'
+
+# Error outcomes in last 6 hours
+telnyx-edge logs hr-leave-assistant --since 6h --json | jq 'select(.outcome == "error")'
+
+# Pretty-print key fields for errors
+telnyx-edge logs hr-leave-assistant --since 6h --json | jq 'select(.outcome == "error") | {ts, event, outcome, status, call_ref, duration_ms, detail, failed}'
+
+# Filter by severity level
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.level == "error")'
+
+# Authentication failures
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.outcome | test("auth_failed|locked|unauthenticated|unauthorized"))'
+
+# Business rule failures
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.outcome | test("insufficient_balance|overlap|out_of_policy"))'
+
+# Actor unavailable or dependency failures
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.detail == "actor_unavailable")'
+
+# KV or Roster errors
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.kv == "error" or .roster == "error")'
+
+# Failed ops-check dependencies
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.failed != null)'
+```
+
+### 6.4 Specific tool logs
+
+```bash
+# verify_employee
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "verify_employee")'
+
+# get_leave_balance
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "get_leave_balance")'
+
+# apply_leave
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "apply_leave")'
+
+# cancel_leave
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "cancel_leave")'
+
+# get_leave_policy
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "get_leave_policy")'
+
+# request_callback
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "request_callback")'
+
+# list_upcoming_leave
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "list_upcoming_leave")'
+```
+
+### 6.5 Specific tool + time window
+
+```bash
+# verify_employee in last 30 minutes
+telnyx-edge logs hr-leave-assistant --since 30m --json | jq 'select(.tool == "verify_employee")'
+
+# apply_leave in last 2 hours
+telnyx-edge logs hr-leave-assistant --since 2h --json | jq 'select(.tool == "apply_leave")'
+
+# Specific tool, last 200 lines only
+telnyx-edge logs hr-leave-assistant --last 200 --json | jq 'select(.tool == "cancel_leave")'
+```
+
+### 6.6 Specific tool + outcome
+
+```bash
+# verify_employee that failed auth
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "verify_employee" and .outcome == "auth_failed")'
+
+# apply_leave approved
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "apply_leave" and .outcome == "approved")'
+
+# cancel_leave cancelled
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "cancel_leave" and .outcome == "cancelled")'
+
+# get_leave_balance ok
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "get_leave_balance" and .outcome == "ok")'
+
+# Any tool with error
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "apply_leave" and .outcome == "error")'
+
+# Any tool unauthenticated
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "get_leave_balance" and .outcome == "unauthenticated")'
+```
+
+### 6.7 Compact views
+
+```bash
+# verify_employee: key fields only
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "verify_employee") | {ts, outcome, status, call_ref, emp, duration_ms, actor_ms}'
+
+# apply_leave: show outcome and actor_event
+telnyx-edge logs hr-leave-assistant --json | jq 'select(.tool == "apply_leave") | {ts, outcome, status, call_ref, actor_event, duration_ms}'
+```
+
+### 6.8 Live tail for one tool
+
+```bash
+# Watch verify_employee in real-time
+telnyx-edge logs hr-leave-assistant --tail --json | jq 'select(.tool == "verify_employee")'
+
+# Watch balance-related tools
+telnyx-edge logs hr-leave-assistant --tail --json | jq 'select(.tool == "get_leave_balance" or .tool == "get_leave_policy")'
+```
+
+### 6.9 Summaries
+
+```bash
+# Count calls per tool in last hour
+telnyx-edge logs hr-leave-assistant --since 1h --json | jq -r '.tool // "webhook"' | sort | uniq -c | sort -rn
+
+# Count errors by outcome in last 6 hours
+telnyx-edge logs hr-leave-assistant --since 6h --json | jq -r '.outcome' | sort | uniq -c | sort -rn
+
+# Group by HTTP status
+telnyx-edge logs hr-leave-assistant --since 6h --json | jq -r '"\(.status) \(.outcome)"' | sort | uniq -c | sort -rn
+```
+
+### 6.10 Actor logs
+
+```bash
+# EmployeeLeave actor errors
+telnyx-edge actors logs EmployeeLeave --json | jq 'select(.outcome == "error")'
+
+# HrDesk actor errors
+telnyx-edge actors logs HrDesk --json | jq 'select(.outcome == "error")'
+
+# Live tail for actors
+telnyx-edge actors logs EmployeeLeave --tail
+```
+
+### 6.11 Metrics
 
 ```bash
 # Function metrics (24h window)
@@ -210,7 +372,7 @@ telnyx-edge metrics hr-leave-assistant
 telnyx-edge metrics hr-leave-assistant --since 1h --json
 ```
 
-### 6.3 Trace a specific call
+### 6.12 Trace a specific call
 
 ```bash
 # Find one call by call_ref (shell helper in repo)

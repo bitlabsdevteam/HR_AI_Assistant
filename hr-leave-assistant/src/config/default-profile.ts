@@ -62,12 +62,12 @@ export interface CompanyProfile {
 }
 
 /**
- * Fallback profile for the fictional Cedar Group. Used whenever KV cannot supply a valid
+ * Fallback profile for the fictional TeraLabs Inc. Used whenever KV cannot supply a valid
  * profile; callers see `kv: "missing"` or `kv: "error"` in the logs. The numbers and dates in `policy`
  * are written out by hand, so update them together with the structured fields above.
  */
 export const DEFAULT_PROFILE: CompanyProfile = {
-  companyName: "Cedar Group",
+  companyName: "TeraLabs Inc.",
   timezone: "America/New_York",
   entitlementDays: 14,
   hours: {
@@ -95,6 +95,6 @@ export const DEFAULT_PROFILE: CompanyProfile = {
     process:
       "After signing in, give the first and last day of your leave. The assistant reads the request back and asks for a clear yes before applying. Annual leave within your balance is approved immediately.",
     hours:
-      "The Cedar Group HR desk is open Monday through Friday, from 9 AM to 5 PM Eastern Time.",
+      "The TeraLabs Inc. HR desk is open Monday through Friday, from 9 AM to 5 PM Eastern Time.",
   },
 };
