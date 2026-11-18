@@ -23,7 +23,7 @@ Confirmed choices: HR leave assistant (balance, apply, cancel), English, TypeScr
 | 4b | Telnyx KV for cache, session, or flags | Leave-changes pause flag and the company leave policy | §8.4 |
 | 4c | Stateful Actor with a read-modify-write | Per-employee leave balance with atomic apply and cancel, and PIN-attempt lockout; per-caller call counter | §8.1–8.2 |
 | 5 | Structured logs, one more signal, one-minute detection, a real debugging story | JSON logs with a per-call ID, platform metrics, actor counters, a 15-second probe, an incident file | §10 |
-| 6 | Built with Telnyx Inference through OpenCode | The developer builds with the OpenCode coding agent on a Telnyx-hosted model, which writes all solution code. Claude Code reviews each slice and writes none. Sessions and reviews are logged | §14.2 |
+| 6 | Built with Telnyx Inference through OpenCode | The developer builds with the OpenCode coding agent on a Telnyx-hosted model, which wrote the original solution code. From 2026-11-18 any coding agent may write code; Claude Code reviews each slice. Sessions, authors and models are logged | §14.2 |
 | 7 | Public deployment and documentation | Number, URLs, README with a synthetic test employee, demo script, OpenCode config | §§14–15 |
 
 ## 3. Scope

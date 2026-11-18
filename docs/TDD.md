@@ -24,7 +24,7 @@ An English phone assistant for the HR desk of a fictional company, Cedar Group. 
 | Crypto | Web Crypto: Ed25519 verify, HMAC-SHA-256, SHA-256 | No extra dependency. |
 | Tests | Vitest for pure domain code; shell scripts against the deployed app | `telnyx-edge dev` needs Docker and does not emulate KV or secrets, so the deployed app is the integration environment. [S08] |
 | Tracing | Langfuse (host and keys held by David), two paths: the assistant's `observability_settings` (platform side, no code) and OTLP/HTTP spans from the function (Should tier) | The function uses plain `fetch` and Web Crypto; no Langfuse SDK. §10.5. [S23, S24] |
-| Coding agent (builder) | OpenCode + `@telnyx/opencode` on a Telnyx-hosted model | Writes all solution code. Challenge requirement 6. See §14.2. |
+| Coding agent (builder) | OpenCode + `@telnyx/opencode` on a Telnyx-hosted model, plus any other coding agent David chooses (rule relaxed 2026-11-18) | Writes solution code. Challenge requirement 6. See §14.2. |
 | Review agent | Claude Code | Reviews each slice; writes no solution code. See §14.2. |
 
 One SQL database for the employee roster; no queue, external collector, HR system, or frontend.
@@ -631,14 +631,14 @@ Two tools with separate jobs, both directed by the developer, David:
 
 | Role | Tool | Does | Does not |
 | --- | --- | --- | --- |
-| **Builder** | OpenCode coding agent with `@telnyx/opencode`, on a Telnyx-hosted model | Writes all solution code under `hr-leave-assistant/`, `scripts/`, and `assistant/`; runs tests; ships on David's go-ahead; writes the DEVLOG entry. Follows `AGENTS.md`. | — |
-| **Reviewer** | Claude Code | Reviews each committed slice against this TDD, the `AGENTS.md` invariants, and the §9 security floor; checks that claimed evidence exists; maintains the planning documents. Follows `CLAUDE.md`. | Write or fix solution code. |
+| **Builder** | OpenCode coding agent with `@telnyx/opencode`, on a Telnyx-hosted model | Writes solution code under `hr-leave-assistant/`, `scripts/`, and `assistant/`; runs tests; ships on David's go-ahead; writes the DEVLOG entry. Follows `AGENTS.md`. Since 2026-11-18 it is not the only author: any coding agent may write code. | — |
+| **Reviewer** | Claude Code | Reviews each committed slice against this TDD, the `AGENTS.md` invariants, and the §9 security floor; checks that claimed evidence exists; maintains the planning documents. Follows `CLAUDE.md`. | — (since 2026-11-18 Claude Code may also write solution code when asked; it logs the change in the DEVLOG.) |
 
 The loop per slice: OpenCode builds, verifies, and commits (the slice loop in `AGENTS.md`). Claude Code reviews that commit and reports findings to David, most severe first. David passes the findings he accepts to OpenCode, which fixes them in a new commit. Blocking findings (a broken invariant, a security-floor gap, a false success path) are fixed before the next slice starts; the rest are batched.
 
-This satisfies the challenge's rule that Telnyx Inference powers the coding while allowing a comparison with another tool: the code's author is always the Telnyx-hosted model, and Claude Code's contribution is review and planning. The README states this split.
+This was written to satisfy the challenge's rule that Telnyx Inference powers the coding: the code's author was the Telnyx-hosted model and Claude Code's contribution was review and planning. From 2026-11-18 other agents may also write code, so the README must state the real split, per the DEVLOG, and not claim OpenCode wrote everything.
 
-Records: `docs/DEVLOG.md` gets one entry per OpenCode session (date, model ID, what was built, what the model did well or badly) and one line per review (commit reviewed, findings raised, findings fixed). If David ever asks Claude Code to write something in the solution tree, it is logged in the DEVLOG as a disclosed exception.
+Records: `docs/DEVLOG.md` gets one entry per OpenCode session (date, model ID, what was built, what the model did well or badly) and one line per review (commit reviewed, findings raised, findings fixed). Code written by any other agent is logged in the DEVLOG with the agent and model ID; it is no longer called an exception.
 
 ### 14.3 Day-1 runbook
 
