@@ -10,6 +10,7 @@ Built for the Telnyx coding challenge on **Telnyx AI Assistants** (Conversation 
 | Leave rules | 14 days annual leave per leave year (1 Jul 2026 to 30 Jun 2027); Monday to Friday only; 26 Nov 2026, 25 Dec 2026 and 1 Jan 2027 do not count; at least one day's notice; up to 10 working days per request; annual leave within the balance is approved immediately |
 | Live function | `https://hr-leave-assistant-903aedd3-9.telnyxcompute.com` |
 | Phone number | **`+1 253 294 7206`** (`+12532947206`), call in to test the AI assistant workflow |
+| Public MCP URL | `https://hr-leave-assistant-903aedd3-9.telnyxcompute.com/mcp` (streamable HTTP, seven tools; needs the bearer token, the Edge secret `HRLEAVE_MCP_BEARER`, and returns 401 without it) |
 | Checks at last run | `npm run typecheck` clean; `npm test` 158 tests in 16 files pass (2026-11-18) |
 
 > All data is synthetic. Never use real employee data or real PINs with this project.
