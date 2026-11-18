@@ -8,7 +8,7 @@ telnyx-edge storage kv key put "$NAMESPACE_ID" flags/leave_changes_enabled "true
 
 # Seed the company profile
 telnyx-edge storage kv key put "$NAMESPACE_ID" profile/current '{
-  "companyName": "Cedar Group",
+   "companyName": "TeraLabs Inc.",
   "timezone": "America/New_York",
   "entitlementDays": 14,
   "hours": {
@@ -30,7 +30,7 @@ telnyx-edge storage kv key put "$NAMESPACE_ID" profile/current '{
     "carry_over": "This phone service handles annual leave for the current leave year only. Please ask the HR team about carry-over.",
     "holidays": "Annual leave counts Monday through Friday, excluding November 26, 2026, December 25, 2026, and January 1, 2027.",
     "process": "After signing in, give the first and last day of your leave. The assistant reads the request back and asks for a clear yes before applying. Annual leave within your balance is approved immediately.",
-    "hours": "The Cedar Group HR desk is open Monday through Friday, from 9 AM to 5 PM Eastern Time."
+     "hours": "The TeraLabs Inc. HR desk is open Monday through Friday, from 9 AM to 5 PM Eastern Time."
   }
 }'
 
