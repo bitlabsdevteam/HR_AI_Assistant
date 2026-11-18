@@ -379,3 +379,9 @@ Corrections to my first diagram: (1) N80 speaks the `reference` returned by `app
 - **Observations**:
   - The wiki warns that SQL bindings may only be on imported `env`, not the `fetch` argument. `resolveTeradb` implements the fallback; which one wins at runtime will be verified after deploy and recorded here.
   - `telnyx-edge types` successfully generated `TERADB: SqlDatabase` with `@telnyx/edge-runtime` 0.16.1.
+
+## 2026-11-18 — rule change: any coding agent may write solution code (Claude Code, documents only)
+
+- David removed the rule that only OpenCode writes solution code. Updated `CLAUDE.md` (role and code-writing paragraphs), `AGENTS.md` (intro), `docs/TDD.md` (§3 builder row, §14.2 table, rationale and records paragraphs) and `docs/PRD.md` (requirement 6 row).
+- Claude Code said once that challenge requirement 6 (Telnyx Inference through OpenCode) is a graded challenge requirement and is unchanged by this internal rule. The README §7 provenance statement must stay true: record each author and model ID in the DEVLOG. Past Claude-authored changes stay logged as disclosed exceptions (history is not rewritten).
+- No solution code written; nothing deployed. Not committed.

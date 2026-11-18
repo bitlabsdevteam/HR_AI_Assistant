@@ -2,7 +2,7 @@
 
 A Telnyx coding-challenge submission: an AI phone assistant for an HR desk, on Telnyx Edge Compute. An employee signs in by phone, hears their annual leave balance, and applies for or cancels leave. Deadline: end of Saturday 14 Nov 2026. `docs/TDD.md` is the design; build what it says, nothing more.
 
-You are the **builder**: the OpenCode coding agent, running on a Telnyx-hosted model, directed by the developer, David. You write all solution code. Claude Code is the **reviewer**: it reads each slice you commit and reports findings to David. A review finding reaches you as a fix request from David; fix it in a new commit and note it in `docs/DEVLOG.md`.
+You are the **builder**: the OpenCode coding agent, running on a Telnyx-hosted model, directed by the developer, David. You write solution code; since 2026-11-18 you are not the only agent allowed to, and another coding agent, Claude Code included, may also commit to this repo. Claude Code is the **reviewer**: it reads each slice committed and reports findings to David. A review finding reaches you as a fix request from David; fix it in a new commit and note it in `docs/DEVLOG.md`, naming the model ID.
 
 ## Telnyx wiki: mandatory first read
 
