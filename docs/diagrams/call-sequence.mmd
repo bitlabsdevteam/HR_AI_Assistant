@@ -1,0 +1,74 @@
+---
+title: One call step by step - sign in, balance, apply for leave
+---
+%% One call, step by step: sign in, check balance, apply for leave.
+%% Sources: docs/TDD.md §5-§7, hr-leave-assistant/src/tools.ts, src/lib/session.ts
+sequenceDiagram
+    autonumber
+    actor C as Caller
+    participant A as Telnyx Assistant<br/>(workflow)
+    participant F as Edge Function<br/>(/webhooks/dynamic-variables, /mcp)
+    participant S as KV + SQL roster
+    participant E as EmployeeLeave actor<br/>(one per employee)
+
+    C->>A: Dials the number
+    rect rgb(255, 244, 224)
+    Note over A,F: Call start (webhook not wired on the live assistant yet)
+    A->>F: assistant.initialization (signed)
+    F-->>A: call_ref, today_iso, today_spoken, leave_changes_enabled
+    end
+
+    rect rgb(232, 241, 255)
+    Note over C,E: Sign in
+    A->>C: Which department? Employee number, then PIN
+    C->>A: 1001 ... PIN (never spoken back)
+    A->>F: verify_employee(employee_number, pin)
+    F->>S: Look up employee in roster
+    F->>E: Check PIN, count attempt (lock at 3)
+    E-->>F: ok / wrong PIN / locked
+    alt PIN ok
+        F->>S: Store session token (KV)
+        F-->>A: ok + first name + session token (tied to this call)
+        A->>C: Greets the caller (name not yet confirmed by a call). How can I help?
+    else wrong PIN
+        F-->>A: auth_failed, tries left
+        A->>C: Asks again
+    else 3 wrong PINs
+        F-->>A: locked for 15 minutes
+        A->>C: Offers an HR callback
+    end
+    end
+
+    rect rgb(233, 248, 238)
+    Note over C,E: Balance (later tools carry the token, never an employee number)
+    C->>A: How many days do I have left?
+    A->>F: get_leave_balance(token)
+    F->>E: Read balance and upcoming leave
+    E-->>F: days left
+    F-->>A: days left, upcoming leave
+    A->>C: You have N days left
+    end
+
+    rect rgb(243, 236, 255)
+    Note over C,E: Apply for leave (read back, then change)
+    C->>A: Leave next Monday to Wednesday
+    A->>F: preview_leave(token, dates)
+    F-->>A: working days + days left afterwards
+    A->>C: 3 working days, N left. Shall I apply?
+    C->>A: Yes
+    A->>F: apply_leave(token, dates)
+    F->>S: Is leave paused? (KV flag)
+    F->>E: Enough balance and no overlap? Reserve it
+    alt approved
+        E-->>F: approved + reference
+        F-->>A: approved, LV-XXXX
+        A->>C: Approved, reference LV-XXXX
+    else overlap or not enough balance
+        E-->>F: refused
+        F-->>A: overlap / insufficient_balance
+        A->>C: Offers other dates or an HR callback
+    end
+    end
+
+    A->>C: Anything else? Goodbye
+    Note over C,F: Cancel works the same way (cancel_leave). Also get_leave_policy, request_hr_callback.<br/>Dotted arrows here are replies.<br/>Each function request writes one JSON log line.<br/>Assistant turns go to Langfuse (function spans unverified)

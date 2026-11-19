@@ -1,0 +1,80 @@
+---
+title: HR leave assistant - how a call flows (follow the numbers 1 to 5b)
+---
+%% Sources: docs/TDD.md §3-§8, hr-leave-assistant/src/*, docs/DEMO_PLAN.md §0 (live workflow, 2026-11-19)
+flowchart TB
+    caller(["<b>CALLER</b><br/>phones the assistant's number"])
+
+    subgraph A["<b>A. TELNYX AI ASSISTANT</b>: live workflow, 7 nodes (receptionist, verify, 2 speak, 2 managers, wrap-up)"]
+        direction LR
+        n1["<b>ai_receptionist</b><br/>HR or Finance?"]
+        n2["<b>verify_employee</b> (node)<br/>employee number + PIN<br/>calls the tool of the same name<br/>model sets department_id"]
+        n3["<b>hr_speaking</b> (speak node)<br/>greeting; name placeholder<br/>not yet confirmed by a call"]
+        n4["<b>hr_manager</b><br/>policy, balance,<br/>apply, cancel"]
+        n5["<b>wrap_up</b><br/>close the call,<br/>hang up"]
+        f1["<b>Finance branch (2 nodes)</b><br/>finance_manager_speaking<br/>finance_manager<br/>assistant only: no Finance tools in code"]
+        n1 -->|"LLM edge"| n2
+        n2 -->|"variable edge<br/>department_id = 111"| n3
+        n3 -->|"default"| n4
+        n4 -->|"LLM edge"| n5
+        n2 -.->|"variable edge<br/>department_id = 112"| f1
+        f1 -.->|"LLM edge"| n5
+    end
+
+    subgraph B["<b>B. EDGE FUNCTION</b> hr-leave-assistant (one TypeScript app)"]
+        direction TB
+        wh["<b>/webhooks/dynamic-variables</b><br/><b>NOT WIRED LIVE</b><br/>signed request, 2 s deadline<br/>returns call_ref + flags<br/><i>uses KV, CallerProfile</i>"]
+        mcp["<b>/mcp</b> (bearer + session token)<br/>7 tools: verify_employee, get_leave_balance,<br/>preview_leave, apply_leave, cancel_leave,<br/>get_leave_policy, request_hr_callback<br/><i>uses KV, SQL, EmployeeLeave, HrDesk</i>"]
+        adm["<b>/ops/check and /admin/*</b><br/>operator only<br/><i>reads or resets all state</i>"]
+    end
+
+    subgraph C["<b>C. STATE</b>: one store for each job"]
+        direction TB
+        kv[("<b>Telnyx KV</b><br/>pause flag, policy<br/>text, session tokens")]
+        sql[("<b>SQL Employee</b><br/>roster,<br/>PIN hashes")]
+        el["<b>EmployeeLeave actor</b><br/>one per employee:<br/>PIN lockout, balance,<br/>leave requests"]
+        hd["<b>HrDesk actor</b><br/>callbacks,<br/>unknown-number<br/>lockout"]
+        cp["<b>CallerProfile actor</b><br/>call counter<br/>per caller"]
+    end
+
+    subgraph D["<b>D. OBSERVABILITY</b>"]
+        direction TB
+        logs["<b>JSON logs</b><br/>one line per function request<br/>(telnyx-edge logs)"]
+        lf["<b>Langfuse traces</b><br/>assistant model turns<br/>(function spans: best effort, unverified)"]
+    end
+
+    human(["<b>Human manager</b><br/>call transfer"])
+    op(["<b>Operator</b><br/>smoke.sh, race.sh"])
+    legend["<b>Line styles</b><br/>thick = main call path<br/>thin = supporting path<br/>dotted = not wired live,<br/>unverified, or assistant-only<br/>red dashed box = not in the code"]
+    gloss["<b>Words used</b><br/>variable edge: fixed rule on a stored value<br/>LLM edge: the model decides from what the caller says<br/>speak node: fixed words. MCP: how the assistant calls tools<br/>KV: key-value store. actor: one-at-a-time record keeper"]
+
+    caller ==>|"1 dials"| A
+    A -.->|"2 call start"| B
+    A ==>|"3 MCP tool calls"| B
+    B ==>|"4 reads and writes state"| C
+    B -->|"5a logs"| D
+    A -->|"5b traces"| D
+    f1 -.->|"transfer"| human
+    n4 -.->|"transfer"| human
+    op -->|"checks"| B
+    legend ~~~ D
+    legend ~~~ gloss
+
+    classDef who fill:#fff7e0,stroke:#b7791f,stroke-width:2px;
+    classDef assistant fill:#e8f1ff,stroke:#2b6cb0;
+    classDef fn fill:#e9f8ee,stroke:#2f855a;
+    classDef store fill:#f3ecff,stroke:#6b46c1;
+    classDef obs fill:#f2f2f2,stroke:#666;
+    classDef gap fill:#fdecec,stroke:#c0392b,stroke-dasharray:5 3,color:#7b1d1d;
+    classDef note fill:#ffffff,stroke:#999,stroke-dasharray:2 2;
+    class caller,human,op who;
+    class n1,n2,n3,n4,n5 assistant;
+    class wh,mcp,adm fn;
+    class kv,sql,el,hd,cp store;
+    class logs,lf obs;
+    class f1 gap;
+    class legend,gloss note;
+    style A fill:#f7fbff,stroke:#2b6cb0,stroke-width:2px
+    style B fill:#f6fcf8,stroke:#2f855a,stroke-width:2px
+    style C fill:#fbf8ff,stroke:#6b46c1,stroke-width:2px
+    style D fill:#fafafa,stroke:#888,stroke-width:2px
